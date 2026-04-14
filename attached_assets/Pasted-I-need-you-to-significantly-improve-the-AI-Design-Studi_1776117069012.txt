@@ -1,0 +1,95 @@
+I need you to significantly improve the AI Design Studio (/studio) across four areas. Work through them one by one.
+
+---
+
+## 1. REAL AI DESIGN GENERATION (Replicate API Integration)
+
+Replace the placeholder text output with actual AI-generated images rendered on the canvas.
+
+- Connect to the Replicate API using the REPLICATE_API_TOKEN env variable
+- Use the model: "black-forest-labs/flux-schnell" (fast, high quality)
+- When user clicks "Generate Design", send their prompt + selected style modifiers to Replicate
+- The API call should happen server-side (Next.js API route: /api/generate-design)
+- Request a square output image (1024x1024), transparent or white background preferred
+- Once image URL is returned, render it on the Fabric.js canvas overlaid on the garment mockup
+- Show a loading spinner with text "Generating your design..." while waiting
+- If generation fails, show a toast error: "Generation failed — please try again"
+- The "Regenerate" button should re-run the same prompt with a variation seed
+- Style modifiers (Vintage, Bold, Streetwear etc.) should append to the prompt automatically
+  e.g. if user types "eagle" and selects "Vintage" + "Grunge", the actual prompt sent becomes:
+  "eagle, vintage style, grunge aesthetic, apparel graphic design, transparent background, vector art style"
+
+---
+
+## 2. REALISTIC CANVAS & MOCKUP PREVIEW
+
+Make the t-shirt canvas look like a real product preview, not a grey silhouette.
+
+- Replace the current grey garment silhouette with realistic flat-lay t-shirt mockup images
+- Create separate mockup images (or use CSS/SVG) for: Front, Back, Left Sleeve, Right Sleeve views
+- Use a different mockup image per garment color selected — at minimum: Black, White, Grey, Navy, Maroon, Olive, Royal Blue, Red (match the color swatches already shown)
+- When a color swatch is clicked, swap the mockup image to the matching colored garment
+- The AI-generated design (or uploaded logo) should be placed on the chest area of the mockup (centered, ~35% width of garment)
+- Apply a soft multiply or overlay blend mode so the design looks printed on fabric, not just pasted on top
+- Add subtle shadow/drop-shadow under the design layer to simulate print depth
+- The design should scale and reposition naturally when switching between Front/Back/Sleeve views
+- Zoom in/out (already present) should work smoothly on the canvas
+- On mobile: the canvas should take full screen width with controls below it
+
+---
+
+## 3. UI POLISH — STUDIO PAGE
+
+Make the Design Studio feel premium and on-brand (black and gold, luxury streetwear).
+
+Specific improvements:
+
+- **Left Panel (Product Selector):**
+  - Replace the plain dropdown for product selection with a visual grid of product thumbnails (small icons or illustrations) that the user clicks to select
+  - Color swatches should have a gold ring on hover and a gold checkmark when selected
+  - Size buttons: selected state should be gold background, black text
+  - Fabric and GSM dropdowns: style with dark background, gold border on focus
+  - "Add Brand Label" checkbox: replace with a premium toggle switch
+
+- **Right Panel (AI Generate Tab):**
+  - The prompt textarea should have a glowing gold border on focus
+  - Style modifier pills: unselected = dark outlined, selected = solid gold fill
+  - "Generate Design" button: make it full-width, larger, with a lightning bolt icon and subtle shimmer animation on hover
+  - Show a character count below the prompt (max 300 chars)
+  - Add placeholder text in the textarea: "e.g. A vintage eagle with lightning bolts, gothic lettering..."
+
+- **Center Canvas Panel:**
+  - Add a thin gold border frame around the canvas area
+  - The Front/Back/Sleeve toggle buttons: active state should be gold, inactive dark
+  - Zoom controls: style consistently with the rest of the dark UI
+  - Add a subtle "Click canvas to reposition design" hint text below canvas
+
+- **General:**
+  - Ensure Bebas Neue is loaded and applied to all headings and nav items
+  - All hover transitions should be smooth (150-200ms)
+  - Add a thin gold horizontal rule between the left panel sections (Product / Color / Size / Fabric / GSM / Label)
+
+---
+
+## 4. BUG FIXES
+
+Fix the following known issues:
+
+1. **Navbar import paths** — audit all component imports in the Navbar and fix any broken paths that cause console errors
+2. **API timestamp crash** — the Drizzle/Zod mismatch where Date objects crash the API expecting ISO strings: convert all date fields to .toISOString() before passing to Zod schemas
+3. **Canvas not resizing on mobile** — the canvas should use 100% of its container width on screens below 768px; detect container width and re-initialize Fabric.js canvas dimensions on resize using a ResizeObserver
+4. **Generate button state** — the button should be disabled (greyed out, not clickable) when the prompt textarea is empty, and re-enable as soon as the user types anything
+5. **Color swatch → mockup sync** — ensure that when a color swatch is selected, both the mockup image AND the stored order data update correctly so the final quote reflects the right garment color
+
+---
+
+## TESTING CHECKLIST (verify each before finishing)
+- [ ] Typing a prompt and clicking Generate produces a real AI image on the canvas
+- [ ] Changing garment color changes the mockup image
+- [ ] Clicking Front/Back/Sleeve switches the view correctly
+- [ ] On iPhone 375px width, the studio is fully usable
+- [ ] Zoom in/out works without breaking design placement
+- [ ] No console errors on page load
+- [ ] "Add to Quote" passes correct product, color, size, fabric, GSM, and design image URL to the quote engine
+
+Work through each section completely before moving to the next. Commit after each section is done.
