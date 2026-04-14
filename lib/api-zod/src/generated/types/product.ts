@@ -16,9 +16,11 @@ export interface Product {
   basePrice: number;
   basePricePkr: number;
   availableColors: string[];
+  availableSizes: string[];
   availableFabrics: string[];
   availableGsm: number[];
   minOrderQty: number;
+  isCustomizable: boolean;
   /** @nullable */
   imageUrl?: string | null;
   featured: boolean;

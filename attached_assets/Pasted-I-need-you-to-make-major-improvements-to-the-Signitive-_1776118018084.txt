@@ -1,0 +1,340 @@
+I need you to make major improvements to the Signitive Enterprises platform across 8 areas. Work through them one by one and commit after each section.
+
+---
+
+## 1. IMPORT ALL EXISTING PRODUCTS FROM SIGNITIVEENTERPRISES.COM
+
+Scrape and import the full product catalog from the existing website into the database.
+Here is the complete product taxonomy to add:
+
+### STREETWEAR
+- Track Suits
+- Fashion Jackets
+- T-Shirts (Regular & Oversized)
+- Hoodies (Regular & Oversized)
+- Sweat Shirts (Regular & Oversized)
+- Beanie Hats
+- Baseball Hats
+- Trousers
+- Varsity / Letterman Jackets
+- Polo Shirts
+- Tank Tops (Men & Women)
+- Quarter-Zips
+- Windbreakers
+- Softshell Jackets
+
+### FITNESS WEAR
+- Gym T-Shirts
+- Rashguards
+- Sports Bras
+- Sublimation Bras
+- Crop Tops
+- Men's Shorts
+- Women's Shorts
+- Leggings
+- Tank Tops
+
+### SPORTS UNIFORMS
+- Soccer Uniforms
+- American Football Uniforms
+- Basketball Uniforms (Jerseys & Shorts)
+- Baseball Uniforms (Jerseys & Pants + Button-ups)
+- Rugby Uniforms
+- Ice Hockey Uniforms
+
+### SPORTS GOODS
+- Basketballs
+- Tennis Balls
+- Soccer Balls
+- Cricket Balls
+- Rugby Balls
+
+### TEAM WEAR
+- School Uniforms
+- Rugby Uniforms
+- Ice Hockey Uniforms
+
+### BOXING
+- Boxing Shorts
+- Boxing Gloves
+- Boxing Shin Pads
+- Boxing Head Guards
+- Boxing Chest Guards
+- Boxing Thai Pads
+- Boxing Robes
+
+### MOTOCROSS
+- Motocross Sets
+- Jerseys
+- Pants
+- Jackets
+- Gloves
+- Body Armour
+- Knee Pads
+
+### CAPS
+- Trucker Hats
+- Baseball Caps
+- Bucket Hats
+- Beanie Hats
+
+For each product create a database record with:
+- name, category, subcategory
+- description (write a professional 2-sentence manufacturing description for each)
+- base_price_pkr (set realistic PKR prices: basic tees ~1800, hoodies ~2800, jackets ~4500, uniforms ~3500, sports goods ~2000, boxing gear ~2500, motocross ~5000)
+- base_price_usd (divide PKR by 280)
+- available_colors: ["Black", "White", "Grey", "Navy", "Maroon", "Olive", "Royal Blue", "Red", "Forest Green", "Burgundy"]
+- available_sizes: ["XS", "S", "M", "L", "XL", "2XL", "3XL"] (adjust per product type)
+- fabric_options: relevant fabrics per category
+- gsm_options: relevant GSM per product
+- min_order_quantity: 25 for most, 50 for sports goods
+- is_customizable: true for all apparel, false for sports goods
+- image_placeholder: use a relevant Unsplash URL for each category
+
+Seed all of this into the database via a /api/seed-products endpoint, then display in the catalog.
+
+---
+
+## 2. HOMEPAGE — MAKE IT PREMIUM & HIGH-CONVERTING
+
+Rebuild the homepage to be a high-energy, trust-building landing page:
+
+### Hero Section
+- Full-bleed dark background (#0a0a0a)
+- Large headline in Bebas Neue: "DESIGN. MANUFACTURE. DOMINATE."
+- Subheadline: "Pakistan's Premier Custom Apparel Manufacturer — From Your Idea to 500 Units in 15 Days"
+- Two CTAs side by side:
+  - Primary (gold): "Start Designing Free →" → /studio
+  - Secondary (outlined): "Browse Catalog" → /catalog
+- Animated counter stats below hero:
+  - 500+ Happy Clients
+  - 50+ Countries Shipped
+  - 1M+ Units Manufactured
+  - 15 Years Experience
+- These numbers should count up with a smooth animation when the section enters the viewport
+
+### AI Studio Showcase Section
+- Dark section with heading: "Design Your Collection in 30 Seconds"
+- Left side: 3-step process with gold icons
+  - Step 1: Type your design prompt
+  - Step 2: AI generates it on your garment
+  - Step 3: Place your bulk order
+- Right side: A live animated mockup showing the studio interface (use a CSS animation or looping GIF slot)
+- CTA: "Try the AI Studio Free →"
+- Add badge: "No Design Skills Needed"
+
+### Product Categories Grid
+- 8 category cards in a responsive grid (2 col mobile, 4 col desktop)
+- Each card: dark background, category image, category name, product count badge
+- On hover: gold border glow, slight scale up
+- Categories: Streetwear, Fitness Wear, Sports Uniforms, Boxing, Motocross, Caps, Team Wear, Sports Goods
+- Clicking a card → /catalog?category=X
+
+### How We Manufacture Section
+- 5-step horizontal timeline (scrollable on mobile):
+  1. Design — AI Studio or send us your artwork
+  2. Sampling — Receive physical sample in 5–7 days
+  3. Production — Bulk manufacturing begins after approval
+  4. Quality Control — Every unit inspected before packing
+  5. Shipping — DHL/FedEx Express worldwide
+- Gold numbered icons, dark cards
+
+### Trust Signals Section
+- Row of logos: "Trusted by brands worldwide" (use placeholder brand silhouettes)
+- Alibaba TrustPass verified badge with link to: https://signitiveenterprises.trustpass.alibaba.com
+- "Sialkot, Pakistan — World Capital of Sportswear Manufacturing" with a subtle map pin icon
+
+### Testimonials Section
+- 3 testimonial cards, dark glass-morphism style
+- Use realistic placeholder testimonials from international buyers:
+  1. "Ordered 200 custom hoodies, quality exceeded expectations. Delivered to UK in 12 days." — James T., UK Brand Owner
+  2. "The AI design tool is incredible. We launched our streetwear brand in 3 weeks." — Maria K., USA
+  3. "Best custom manufacturer we've found. MOQ is reasonable and communication is excellent." — Ahmed R., UAE
+
+### Free Sample CTA Section
+- Gold background section
+- Headline: "Not Ready to Commit? Order a Sample First."
+- Body: "Test our quality with a single sample garment. PKR 2,500 per sample — fully deducted from your bulk order."
+- CTA button: "Order a Sample" → /contact
+
+### Footer
+- Logo + tagline: "Premium Custom Apparel, Made in Pakistan"
+- 4 columns: Quick Links | Product Categories | Contact Info | Social Links
+- Contact: +92 311 4661392 | info@signitiveenterprises.com | Street No. 02, Gulshan Toheed Town, Defence Road, Sialkot, Punjab, Pakistan
+- Alibaba store link
+- WhatsApp click link
+- Copyright 2025 Signitive Enterprises
+- "Made in Sialkot 🇵🇰" badge
+
+---
+
+## 3. WHATSAPP INTEGRATION — THROUGHOUT THE SITE
+
+WhatsApp is the primary sales channel. Integrate it everywhere:
+
+- Floating WhatsApp button (bottom right, above cookie banner):
+  - Green WhatsApp icon
+  - Tooltip: "Chat with us — Usually replies in 1 hour"
+  - Links to: https://wa.me/923114661392
+  - Pulse animation to draw attention
+
+- Quote Engine: Add "Send Quote to WhatsApp" button that pre-fills this message:
+  "Hi Signitive! I'd like a quote for:
+  Product: [product name]
+  Color: [selected color]
+  Size: [selected size]
+  Fabric: [selected fabric]
+  GSM: [selected GSM]
+  Quantity: [quantity]
+  Brand Label: [yes/no]
+  Design: [AI generated / uploaded / no design]"
+
+- Each product page: "Inquire on WhatsApp" button pre-filled with product name
+
+- Contact page: Make WhatsApp the PRIMARY contact method (bigger than the email form)
+
+---
+
+## 4. TRUST SIGNALS & SOCIAL PROOF
+
+Add these throughout the site:
+
+- Animated stat counters on homepage (as described above)
+- Alibaba TrustPass badge in navbar (small, top right) and footer
+- "Sialkot Manufacturer" badge on product pages
+- "Quality Guaranteed" badge: "Every order comes with our satisfaction guarantee"
+- "DHL / FedEx Express Shipping" badge on product pages and footer
+- Add a dedicated /about page:
+  - Company story: "Founded in Sialkot — the city that manufactures 70% of the world's surgical instruments and 40% of its footballs — Signitive Enterprises brings the same precision craftsmanship to custom apparel."
+  - Manufacturing capabilities: sublimation printing, screen printing, embroidery, DTF, cut & sew
+  - Factory photos section (placeholder slots for real photos)
+  - Team section (placeholder)
+  - Certifications placeholder section
+
+---
+
+## 5. QUOTE ENGINE — MAKE IT ADDICTIVE
+
+Improve the bulk quote calculator at /quote:
+
+- MOQ Progress Bar:
+  - Animated gold fill as quantity increases
+  - Show current tier and next tier: "Add 25 more units to unlock 20% off!"
+  - Tier labels: Starter (1–49) | Growth (50–99 = 10% off) | Scale (100–199 = 20% off) | Enterprise (200+ = 25% off)
+
+- Real-time savings display:
+  - "You save: PKR X" updates live as quantity changes
+  - Show both PKR and USD price
+
+- Production timeline estimate:
+  - 1–49 units: 7–10 working days
+  - 50–99 units: 10–12 working days
+  - 100–199 units: 12–15 working days
+  - 200+ units: Contact for timeline
+
+- Quote submission:
+  - Sends email to info@signitiveenterprises.com via Resend API
+  - Pre-fills WhatsApp message (as above)
+  - Shows confirmation: "Quote sent! We'll respond within 1 hour on WhatsApp."
+
+- Free Sample upsell box at bottom:
+  "Not ready for bulk? Order 1 sample — PKR 2,500, deducted from bulk order"
+  CTA: "Add Sample to Quote"
+
+---
+
+## 6. CATALOG PAGE IMPROVEMENTS
+
+- Add sidebar filters:
+  - Category (all 8)
+  - Fabric type
+  - Min Order Quantity
+  - Price range (PKR)
+  - Customizable only toggle
+
+- Product cards:
+  - Dark background, sharp corners (no border radius)
+  - Product image (use Unsplash placeholder per category)
+  - Category badge (gold pill)
+  - Product name in Bebas Neue
+  - "From PKR X / unit" pricing
+  - "MOQ: 25 units" label
+  - Two buttons: "Customize This →" | "Get Quote"
+  - On hover: gold border glow
+
+- Add a search bar at top: "Search products..."
+
+- Breadcrumb navigation: Home > Catalog > [Category]
+
+- "Can't find what you need?" banner at bottom:
+  "We manufacture almost anything. Send us your requirements."
+  CTA: WhatsApp link
+
+---
+
+## 7. SEO SETUP
+
+Add proper SEO to every page using Next.js Metadata API:
+
+Homepage:
+- Title: "Custom Apparel Manufacturer Pakistan | Signitive Enterprises"
+- Description: "Pakistan's premier custom apparel manufacturer. Bulk t-shirts, hoodies, sportswear & more. AI design studio. MOQ 25 units. Ships worldwide from Sialkot."
+
+Studio:
+- Title: "AI Custom Apparel Designer | Design Your Clothing Online | Signitive"
+- Description: "Design custom clothing in seconds using AI. Type a prompt, see it on your garment, place your bulk order. No design skills needed."
+
+Catalog:
+- Title: "Custom Apparel Catalog | Streetwear, Sports, Fitness | Signitive Enterprises"
+
+Quote:
+- Title: "Get a Bulk Manufacturing Quote | Signitive Enterprises"
+
+Also add:
+- robots.txt
+- sitemap.xml (auto-generated)
+- Open Graph image (dark background, gold logo, tagline)
+- Canonical URLs on all pages
+- JSON-LD structured data for LocalBusiness on homepage
+
+---
+
+## 8. CURRENCY TOGGLE & INTERNATIONAL BUYERS SECTION
+
+- Add PKR / USD toggle in the navbar (top right)
+- All prices across the site switch currency when toggled
+- Exchange rate: 1 USD = 280 PKR (hardcoded, with a note "Rate approximate")
+
+- Add "For International Buyers" section on the About page and a banner on the catalog:
+  - Payment methods: T/T Bank Transfer | PayPal | Wise | Western Union
+  - Shipping: DHL Express | FedEx | Sea Freight for large orders
+  - Sampling: "We ship samples worldwide — typically 3–5 days to US/UK/UAE"
+  - MOQ: "Minimum 25 units per design for international orders"
+  - Communication: WhatsApp + Email, response within 1 hour
+
+---
+
+## DESIGN SYSTEM REMINDER
+- Background: #0a0a0a
+- Gold: #C9A84C
+- Text: #FFFFFF primary, #A0A0A0 secondary
+- Font Display: Bebas Neue (headings, product names, nav)
+- Font Body: Inter or Satoshi
+- Cards: #1a1a1a, no border radius, subtle gold border on hover
+- Buttons: solid gold (#C9A84C, black text) primary | outlined gold secondary
+- All hover transitions: 150ms ease
+
+---
+
+## FINAL CHECKLIST
+- [ ] All 80+ products seeded in database and showing in catalog
+- [ ] Homepage loads fast with all sections complete
+- [ ] WhatsApp button visible on every page
+- [ ] Quote engine sends real WhatsApp pre-filled message
+- [ ] Currency toggle works across all pages
+- [ ] SEO meta tags on all pages
+- [ ] Mobile responsive on 375px, 768px, 1280px
+- [ ] No console errors
+- [ ] All internal links work correctly
+
+Work section by section. Commit after each one is complete.

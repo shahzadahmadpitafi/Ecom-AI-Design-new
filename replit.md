@@ -43,12 +43,13 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 | `api-server` | 8080 | `/api` | Express API server |
 
 ### Pages (frontend)
-- `/` — Homepage with hero, featured products, how-it-works, testimonials
+- `/` — Homepage: hero + animated stat counters + ticker marquee + AI Studio showcase + 8-category grid + best sellers + 5-step manufacturing timeline + trust signals + testimonials + free sample CTA + footer
 - `/studio` — AI Design Studio with live canvas preview (3-panel layout)
-- `/catalog` — Product grid with sidebar filters (category, fabric, MOQ)
-- `/quote` — Bulk quote engine with tier discounts + contact form
+- `/catalog` — Product grid with search, category/fabric/MOQ/price/customizable filters, 61 products across 8 categories
+- `/quote` — Bulk quote engine with 4 tier cards, MOQ progress bar, savings summary, production timeline, WhatsApp pre-fill button
+- `/about` — Company story, manufacturing capabilities, factory gallery, international buyers section, certifications
 - `/account` — Saved designs gallery + quick actions sidebar
-- `/contact` — About Signitive + contact form + Alibaba/WhatsApp CTAs
+- `/contact` — Contact form + Alibaba/WhatsApp CTAs
 
 ### API Routes
 - `GET /api/products` — List all products (with filters)
@@ -63,9 +64,10 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - `DELETE /api/designs/:id` — Delete design
 - `POST /api/quotes/calculate` — Calculate bulk pricing with tiers
 - `POST /api/quotes` — Submit quote request
+- `POST /api/seed-products` — (Dev only) Seed all 61 products into the database
 
 ### Database Schema (PostgreSQL)
-- `products` — 23 products across 5 categories (Streetwear, Fitness Wear, Caps, Sports Wear, Motocross)
+- `products` — 61 products across 8 categories (Streetwear, Fitness Wear, Sports Uniforms, Sports Goods, Team Wear, Boxing, Motocross, Caps). Has `availableSizes` (text[]) and `isCustomizable` (boolean) fields.
 - `designs` — Saved design configurations with prompt and product reference
 - `quote_requests` — Quote submissions with tier pricing, status tracking
 
