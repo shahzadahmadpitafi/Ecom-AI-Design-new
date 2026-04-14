@@ -41,27 +41,28 @@ router.post("/edit-design", async (req, res) => {
     parts.push({ text: editPrompt });
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ role: "user", parts }],
-          generationConfig: { responseModalities: ["image", "text"] },
+          generationConfig: { responseModalities: ["IMAGE", "TEXT"] },
         }),
       }
     );
 
     if (!response.ok) {
       const status = response.status;
+      const errData = await response.json().catch(() => ({}));
+      console.error("[edit-design] Gemini error", status, JSON.stringify(errData));
       if (status === 429) {
         return res.status(429).json({ error: "Rate limit reached. Please wait and try again.", code: "RATE_LIMIT" });
       }
       if (status === 400 || status === 403) {
         return res.status(400).json({ error: "Invalid or unauthorized API key.", code: "INVALID_KEY" });
       }
-      const errData = await response.json().catch(() => ({}));
-      return res.status(500).json({ error: "Gemini API error", details: errData });
+      return res.status(500).json({ error: "Gemini API error", code: "GEMINI_ERROR", details: errData });
     }
 
     const data = await response.json();
@@ -69,6 +70,7 @@ router.post("/edit-design", async (req, res) => {
     const imagePart = responseParts.find((p: any) => p.inlineData);
 
     if (!imagePart?.inlineData) {
+      console.error("[edit-design] No image in Gemini response", JSON.stringify(data).slice(0, 500));
       return res.status(500).json({ error: "No edited image returned. Try a more specific instruction.", code: "NO_IMAGE" });
     }
 

@@ -866,16 +866,57 @@ export default function Studio() {
 
   // ── Apply Edit ──
   const handleApplyEdit = async () => {
-    const imageData = getImageBase64();
-    if (!imageData) {
+    if (!generatedImageUrl) {
       toast({ title: "No design to edit", description: "Generate a design first, then use the edit tools.", variant: "destructive" }); return;
     }
-    if (!geminiKey) {
+    const editPrompt = buildEditPrompt(); if (!editPrompt) return;
+
+    // Build a simplified prompt suffix for Pollinations fallback
+    const buildPollinationsEditSuffix = (): string => {
+      const parts: string[] = [];
+      if (editTab === "structure") {
+        if (selectedSleeve) parts.push(selectedSleeve.toLowerCase());
+        if (selectedCollar) parts.push(`${selectedCollar.toLowerCase()} collar`);
+        if (selectedFit) parts.push(`${selectedFit.toLowerCase()} fit`);
+        if (selectedLength) parts.push(`${selectedLength.toLowerCase()} length`);
+      }
+      if (editTab === "colors" && pendingColorEdits.length > 0) {
+        parts.push(pendingColorEdits.map(e => `${e.part} in ${e.colorLabel}`).join(", "));
+      }
+      if (editTab === "logos" && removeBrand) parts.push("no brand logos, clean fabric");
+      return parts.filter(Boolean).join(", ");
+    };
+
+    // Pollinations regeneration with edit baked into prompt
+    const applyWithPollinations = async () => {
+      const suffix = buildPollinationsEditSuffix();
+      const basePrompt = currentPromptRef.current || prompt.trim();
+      const combined = [basePrompt, suffix, "apparel graphic design, professional product mockup, dark background, high quality"].filter(Boolean).join(", ");
+      const seed = Math.floor(Math.random() * 99999);
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(combined)}?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
+      await new Promise<void>((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve();
+        img.onerror = () => resolve();
+        img.src = url;
+        setTimeout(() => resolve(), 45000);
+      });
+      setGeneratedImageUrl(url);
+      setViewCache(prev => ({ ...prev, [currentView]: url }));
+      addToHistory(editPrompt, url, "Edited");
+      setPendingColorEdits([]); setSelectedPart(null); setSelectedColor(null);
+      setRemoveBrand(false); setLogoUploadBase64(null);
+      setSelectedSleeve(null); setSelectedCollar(null); setSelectedFit(null); setSelectedLength(null);
+      toast({ title: "Edit applied!", description: "Your garment has been updated." });
+    };
+
+    // Logo-add always requires Gemini (binary image injection)
+    if (editTab === "logos" && logoUploadBase64 && !geminiKey) {
       setApiKeyOpen(true);
       setTimeout(() => apiKeyRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 200);
-      toast({ title: "API key required for editing", description: "Add your Gemini API key to use AI-powered editing.", variant: "destructive" }); return;
+      toast({ title: "API key required", description: "Logo placement requires a Gemini API key.", variant: "destructive" }); return;
     }
-    const editPrompt = buildEditPrompt(); if (!editPrompt) return;
+
     let msgSet = EDIT_MESSAGES.colors;
     if (editTab==="logos") msgSet = logoUploadBase64 ? EDIT_MESSAGES.logos_add : EDIT_MESSAGES.logos_remove;
     if (editTab==="structure") msgSet = EDIT_MESSAGES.structure;
@@ -883,29 +924,46 @@ export default function Studio() {
     const currentLabel: "Generated"|"Edited" = undoStack.length===0?"Generated":"Edited";
     setUndoStack(prev => [{ id:Date.now().toString(), prompt, imageUrl:generatedImageUrl!, timestamp:Date.now(), label:currentLabel }, ...prev].slice(0,10));
     setIsEditing(true);
+
+    const imageData = getImageBase64();
+
     try {
-      const res = await fetch("/api/edit-design", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-gemini-key": geminiKey },
-        body: JSON.stringify({ currentImageBase64:imageData.base64, currentImageMimeType:imageData.mimeType, editPrompt, logoBase64:logoUploadBase64, logoMimeType:logoUploadMimeType }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (data.imageUrl) {
-        setGeneratedImageUrl(data.imageUrl);
-        addToHistory(editPrompt, data.imageUrl, "Edited");
-        setViewCache(prev => ({ [currentView]: data.imageUrl, ...(prev[currentView] ? {} : {}) }));
-        setPendingColorEdits([]); setSelectedPart(null); setSelectedColor(null);
-        setRemoveBrand(false); setLogoUploadBase64(null);
-        setSelectedSleeve(null); setSelectedCollar(null); setSelectedFit(null); setSelectedLength(null);
-        toast({ title: "Edit applied!", description: "Your garment has been updated." });
-      } else {
-        setUndoStack(prev => prev.slice(1));
-        toast({ title: "Edit failed", description: data.error || "Try again", variant: "destructive" });
-        if (data.code==="NO_API_KEY"||data.code==="INVALID_KEY") setApiKeyOpen(true);
+      // Try Gemini if we have both a key and base64 image data
+      if (geminiKey && imageData) {
+        const res = await fetch("/api/edit-design", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-gemini-key": geminiKey },
+          body: JSON.stringify({ currentImageBase64:imageData.base64, currentImageMimeType:imageData.mimeType, editPrompt, logoBase64:logoUploadBase64, logoMimeType:logoUploadMimeType }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (data.imageUrl) {
+          setGeneratedImageUrl(data.imageUrl);
+          addToHistory(editPrompt, data.imageUrl, "Edited");
+          setViewCache(prev => ({ ...prev, [currentView]: data.imageUrl }));
+          setPendingColorEdits([]); setSelectedPart(null); setSelectedColor(null);
+          setRemoveBrand(false); setLogoUploadBase64(null);
+          setSelectedSleeve(null); setSelectedCollar(null); setSelectedFit(null); setSelectedLength(null);
+          toast({ title: "Edit applied!", description: "Your garment has been updated." });
+          return;
+        }
+        if (data.code === "NO_API_KEY" || data.code === "INVALID_KEY") {
+          setUndoStack(prev => prev.slice(1));
+          setApiKeyOpen(true);
+          toast({ title: "API key issue", description: data.error, variant: "destructive" }); return;
+        }
+        if (data.code === "RATE_LIMIT") {
+          setUndoStack(prev => prev.slice(1));
+          toast({ title: "Rate limit", description: data.error, variant: "destructive" }); return;
+        }
+        // Gemini failed for another reason — fall through to Pollinations below
+        toast({ title: "Switching to AI regeneration", description: "Gemini unavailable — applying edit via free AI.", variant: "default" });
       }
+
+      // Pollinations fallback: regenerate with edit baked into prompt
+      await applyWithPollinations();
     } catch (err: any) {
       setUndoStack(prev => prev.slice(1));
-      toast({ title: "Edit failed", description: err.message, variant: "destructive" });
+      toast({ title: "Edit failed", description: err.message || "Try again", variant: "destructive" });
     } finally { setIsEditing(false); }
   };
 
