@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Signitive Enterprises"
+version = "1.0.0"
+id = "artifacts/signitive"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22006
+
+[services.development]
+run = "pnpm --filter @workspace/signitive run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/signitive", "run", "build" ]
+publicDir = "artifacts/signitive/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22006"
+BASE_PATH = "/"

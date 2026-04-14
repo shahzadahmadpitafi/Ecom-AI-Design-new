@@ -3,13 +3,21 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Signitive Enterprises API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: products
+    description: Product catalog operations
+  - name: designs
+    description: Saved design operations
+  - name: quotes
+    description: Bulk order quote operations
+  - name: catalog
+    description: Catalog summary operations
 paths:
   /healthz:
     get:
@@ -24,6 +32,227 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      summary: List all products
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: subcategory
+          in: query
+          schema:
+            type: string
+        - name: fabric
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: List of products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+
+  /products/{id}:
+    get:
+      operationId: getProduct
+      tags: [products]
+      summary: Get a product by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Product details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /catalog/summary:
+    get:
+      operationId: getCatalogSummary
+      tags: [catalog]
+      summary: Get catalog summary stats
+      responses:
+        "200":
+          description: Catalog summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogSummary"
+
+  /catalog/categories:
+    get:
+      operationId: listCategories
+      tags: [catalog]
+      summary: List all product categories with counts
+      responses:
+        "200":
+          description: Category list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CategoryCount"
+
+  /catalog/featured:
+    get:
+      operationId: getFeaturedProducts
+      tags: [catalog]
+      summary: Get featured/popular products for homepage
+      responses:
+        "200":
+          description: Featured products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+
+  /designs:
+    get:
+      operationId: listDesigns
+      tags: [designs]
+      summary: List saved designs
+      responses:
+        "200":
+          description: List of saved designs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Design"
+    post:
+      operationId: createDesign
+      tags: [designs]
+      summary: Save a new design
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDesignBody"
+      responses:
+        "201":
+          description: Design created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Design"
+
+  /designs/{id}:
+    get:
+      operationId: getDesign
+      tags: [designs]
+      summary: Get a saved design
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Design details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Design"
+        "404":
+          description: Design not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteDesign
+      tags: [designs]
+      summary: Delete a saved design
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Design deleted
+        "404":
+          description: Design not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /quotes:
+    post:
+      operationId: createQuoteRequest
+      tags: [quotes]
+      summary: Submit a bulk order quote request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateQuoteRequestBody"
+      responses:
+        "201":
+          description: Quote request submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuoteRequest"
+
+  /quotes/calculate:
+    post:
+      operationId: calculateQuote
+      tags: [quotes]
+      summary: Calculate pricing for a quote (no DB write)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CalculateQuoteBody"
+      responses:
+        "200":
+          description: Pricing calculation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuoteCalculation"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +263,275 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        category:
+          type: string
+        subcategory:
+          type: string
+        description:
+          type: ["string", "null"]
+        basePrice:
+          type: number
+        basePricePkr:
+          type: number
+        availableColors:
+          type: array
+          items:
+            type: string
+        availableFabrics:
+          type: array
+          items:
+            type: string
+        availableGsm:
+          type: array
+          items:
+            type: integer
+        minOrderQty:
+          type: integer
+        imageUrl:
+          type: ["string", "null"]
+        featured:
+          type: boolean
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - category
+        - subcategory
+        - basePrice
+        - basePricePkr
+        - availableColors
+        - availableFabrics
+        - availableGsm
+        - minOrderQty
+        - featured
+        - createdAt
+
+    CatalogSummary:
+      type: object
+      properties:
+        totalProducts:
+          type: integer
+        totalCategories:
+          type: integer
+        startingPricePkr:
+          type: number
+        countriesServed:
+          type: integer
+      required:
+        - totalProducts
+        - totalCategories
+        - startingPricePkr
+        - countriesServed
+
+    CategoryCount:
+      type: object
+      properties:
+        category:
+          type: string
+        count:
+          type: integer
+        subcategories:
+          type: array
+          items:
+            type: string
+      required:
+        - category
+        - count
+        - subcategories
+
+    Design:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        productId:
+          type: ["integer", "null"]
+        productName:
+          type: ["string", "null"]
+        designData:
+          type: string
+        previewUrl:
+          type: ["string", "null"]
+        prompt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - name
+        - designData
+        - createdAt
+        - updatedAt
+
+    CreateDesignBody:
+      type: object
+      properties:
+        name:
+          type: string
+        productId:
+          type: ["integer", "null"]
+        designData:
+          type: string
+        previewUrl:
+          type: ["string", "null"]
+        prompt:
+          type: ["string", "null"]
+      required:
+        - name
+        - designData
+
+    QuoteRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+        customerName:
+          type: string
+        customerEmail:
+          type: string
+        customerPhone:
+          type: ["string", "null"]
+        items:
+          type: string
+        totalUnits:
+          type: integer
+        estimatedTotal:
+          type: number
+        status:
+          type: string
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - customerName
+        - customerEmail
+        - items
+        - totalUnits
+        - estimatedTotal
+        - status
+        - createdAt
+
+    CreateQuoteRequestBody:
+      type: object
+      properties:
+        customerName:
+          type: string
+        customerEmail:
+          type: string
+        customerPhone:
+          type: ["string", "null"]
+        items:
+          type: string
+        totalUnits:
+          type: integer
+        estimatedTotal:
+          type: number
+        notes:
+          type: ["string", "null"]
+      required:
+        - customerName
+        - customerEmail
+        - items
+        - totalUnits
+        - estimatedTotal
+
+    CalculateQuoteBody:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuoteLineItem"
+      required:
+        - items
+
+    QuoteLineItem:
+      type: object
+      properties:
+        productId:
+          type: integer
+        quantity:
+          type: integer
+        basePricePkr:
+          type: number
+      required:
+        - productId
+        - quantity
+        - basePricePkr
+
+    QuoteCalculation:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CalculatedLineItem"
+        totalUnits:
+          type: integer
+        subtotalPkr:
+          type: number
+        discountPercent:
+          type: integer
+        discountAmountPkr:
+          type: number
+        totalPkr:
+          type: number
+        discountTier:
+          type: string
+        nextTierUnits:
+          type: ["integer", "null"]
+        nextTierDiscount:
+          type: ["integer", "null"]
+        productionDays:
+          type: integer
+        requiresCustomPricing:
+          type: boolean
+      required:
+        - items
+        - totalUnits
+        - subtotalPkr
+        - discountPercent
+        - discountAmountPkr
+        - totalPkr
+        - discountTier
+        - productionDays
+        - requiresCustomPricing
+
+    CalculatedLineItem:
+      type: object
+      properties:
+        productId:
+          type: integer
+        quantity:
+          type: integer
+        unitPricePkr:
+          type: number
+        subtotalPkr:
+          type: number
+      required:
+        - productId
+        - quantity
+        - unitPricePkr
+        - subtotalPkr

@@ -1,0 +1,171 @@
+Build a full-stack, mobile-first e-commerce and AI design platform for **Signitive Enterprises** — a premium custom apparel manufacturer based in Pakistan. The platform allows customers to design, preview, and order custom-printed/embroidered clothing using an AI Design Studio.
+
+---
+
+## BRAND IDENTITY
+- **Brand:** Signitive Enterprises
+- **Aesthetic:** Premium, high-contrast, black and gold — clean, minimalist, bold typography
+- **Reference site for UI/UX inspiration:** https://7thearthstudios.com (clean layout, full-bleed imagery, luxury feel)
+- **Logo:** Use "SIGNITIVE ENTERPRISES" wordmark with lightning bolt motif (black/gold palette)
+- **Website:** www.signitiveenterprises.com
+
+---
+
+## TECH STACK
+- **Frontend:** Next.js 14 (App Router) + Tailwind CSS
+- **Backend:** Node.js / Next.js API routes
+- **Database:** Supabase (PostgreSQL)
+- **AI Image Generation:** Replicate API (use Stable Diffusion XL or FLUX for prompt-to-design)
+- **Image Mapping / Mockup:** Fabric.js or Konva.js for canvas-based design placement on product mockups
+- **Auth:** Supabase Auth (email/password + Google OAuth)
+- **Payments:** Stripe (with PKR support for local; USD for international)
+- **Storage:** Supabase Storage (for user-uploaded logos and generated designs)
+- **Hosting Target:** Vercel-compatible structure
+
+---
+
+## CORE PAGES & FEATURES
+
+### 1. Homepage
+- Full-bleed hero video header (placeholder video slot) showing the manufacturing process and AI Studio in action
+- Animated headline: "Design. Preview. Manufacture."
+- CTA buttons: "Start Designing" → /studio | "Shop Collection" → /catalog
+- Sections: Featured Products, How It Works (3-step), Testimonials, MOQ Info Banner
+- Sticky navbar with logo, nav links, cart icon, account icon
+
+### 2. The AI Design Studio (/studio) — CORE FEATURE
+This is the main workspace. Build it as a split-panel interface:
+
+**Left Panel — Product Selector**
+- Dropdown or visual card picker for product category and sub-category (see catalog below)
+- Color picker for base garment color
+- Size selector
+- Fabric type selector: 100% Cotton / Polyester Blend / Cotton-Poly Mix
+- GSM weight selector: 160gsm / 180gsm / 220gsm / 280gsm
+- Option: "Add Your Own Brand Label" (checkbox — neck label / hem label)
+
+**Center Panel — Live Canvas Preview**
+- Display a flat-lay or ghost mannequin mockup of the selected product
+- Use Fabric.js canvas overlaid on the product image
+- The design (AI-generated or uploaded) renders on the product with basic displacement/warp effect to follow fabric folds
+- Multi-angle toggle: Front / Back / Left Sleeve / Right Sleeve
+- Zoom in/out controls
+
+**Right Panel — Design Input**
+- **Tab 1: Prompt-to-Design (AI Generate)**
+  - Large text input: "Describe your design..." (e.g., "A vintage 90s eagle with neon lightning bolts")
+  - Style modifiers: [Vintage] [Minimalist] [Bold] [Streetwear] [Luxury] [Grunge] toggles
+  - Color palette picker
+  - "Generate Design" button → calls Replicate API → renders result on canvas
+  - Regenerate / Variations buttons
+- **Tab 2: Upload Your Logo**
+  - Drag-and-drop or file upload (PNG, SVG, AI files)
+  - Auto-removes background (use remove.bg API or Replicate)
+  - Places logo on canvas; user can resize/reposition
+- **Tab 3: Text Add-On**
+  - Add custom text, choose font (Google Fonts), size, color, placement
+
+**Bottom Bar (Studio)**
+- "Save Design" (saves to user account)
+- "Add to Quote" → goes to bulk order flow
+
+### 3. Bulk Order Quote Engine (/quote)
+- Table showing: Product | Quantity | Unit Price | Discount | Total
+- Auto-calculate tiered discounts:
+  - 1–49 units → base price
+  - 50–99 units → 10% off
+  - 100–199 units → 20% off
+  - 200+ units → 25% off + "Contact for custom pricing" flag
+- **MOQ Progress Bar:** Visual bar showing how many units until next discount tier
+- Production time estimate based on quantity
+- "Request Quote" button → sends email via Resend/Nodemailer to info@signitiveenterprises.com + customer confirmation
+
+### 4. Product Catalog (/catalog)
+Build with the following taxonomy:
+
+| Category | Sub-categories |
+|---|---|
+| Streetwear | Oversized T-Shirts, T-Shirts, Polo Shirts, Tank Tops (M/W), Quarter-Zips, Letterman Jackets, Oversized Hoodies, Hoodies, Windbreakers, Softshell Jackets, Sweatshirts, Oversized Sweatshirts |
+| Fitness Wear | Gym T-Shirts, Rashguards, Sports Bras, Crop Tops, Men's Shorts, Women's Shorts, Leggings |
+| Caps | Trucker Hats, Baseball Caps, Bucket Hats, Beanie Hats |
+| Sports Wear | Baseball Jerseys & Pants, Basketball Jerseys & Shorts, Baseball Button-ups, American Football Uniforms, Rugby Uniforms, Ice Hockey Uniforms |
+| Motocross | Motocross Sets, Jerseys, Pants, Gloves |
+
+- Filter by category, color, fabric, MOQ
+- Each product card: image, name, "From PKR X / unit", "Customize This" button → /studio with product pre-selected
+- Grid layout (2 col mobile, 4 col desktop)
+
+### 5. User Account (/account)
+- Saved designs gallery
+- Order history
+- Reorder button on past orders
+- Profile settings
+
+### 6. Contact / About
+- About Signitive Enterprises: manufacturer since [year], based in Pakistan, exports globally
+- Contact form + WhatsApp click-to-chat button (+923114661392)
+- Alibaba store link: https://signitiveenterprises.trustpass.alibaba.com
+
+---
+
+## MOBILE-FIRST REQUIREMENTS
+- The AI Studio must be fully functional on mobile — stack panels vertically (product selector → canvas → design input)
+- The AI prompt bar should feel like a chat/text message input (large, thumb-friendly)
+- All tap targets minimum 44px
+- Bottom sheet / drawer pattern for design controls on mobile
+- Test all breakpoints: 375px, 768px, 1280px, 1440px
+
+---
+
+## UI/UX DESIGN SYSTEM
+- **Background:** #0a0a0a (near black)
+- **Primary Gold:** #C9A84C
+- **Text:** #FFFFFF primary, #A0A0A0 secondary
+- **Accent:** #D4AF37 (gold shimmer for CTAs)
+- **Font:** Inter or Satoshi for body; Bebas Neue or Barlow Condensed for display headings
+- **Cards:** Dark glass-morphism style (#1a1a1a with subtle gold border)
+- **Buttons:** Solid gold (#C9A84C, black text) for primary; outlined gold for secondary
+- **Hover states:** Subtle gold glow / shimmer effect
+- No rounded corners on product cards (sharp edges = premium/streetwear feel)
+
+---
+
+## ADDITIONAL FEATURES (include stubs/placeholders if not fully built)
+- WhatsApp floating chat button (bottom right)
+- Cookie consent banner
+- SEO meta tags on all pages (Next.js Metadata API)
+- Favicon using Signitive logo
+- Loading skeleton screens for AI generation
+- Toast notifications for actions (design saved, added to quote, etc.)
+- 404 page with brand styling
+
+---
+
+## ENVIRONMENT VARIABLES NEEDED (create .env.example)
+- NEXT_PUBLIC_SUPABASE_URL
+- NEXT_PUBLIC_SUPABASE_ANON_KEY
+- SUPABASE_SERVICE_ROLE_KEY
+- REPLICATE_API_TOKEN
+- REMOVE_BG_API_KEY
+- STRIPE_SECRET_KEY
+- NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+- RESEND_API_KEY
+- NEXT_PUBLIC_SITE_URL
+
+---
+
+## FOLDER STRUCTURE
+Follow Next.js 14 App Router conventions:
+/app — pages and layouts
+/app/studio — AI Design Studio
+/app/catalog — product catalog
+/app/quote — quote engine
+/app/account — user dashboard
+/components/ui — shared UI components
+/components/studio — studio-specific components
+/lib — Supabase client, Replicate helper, pricing utils
+/public — static assets, product mockup images
+
+---
+
+Start by building: the Homepage, the AI Design Studio page (with canvas + AI prompt tab functional), and the Quote Engine. Use placeholder product mockup images (solid color t-shirt flat-lays) for now. Make the UI pixel-perfect to the design system above.
