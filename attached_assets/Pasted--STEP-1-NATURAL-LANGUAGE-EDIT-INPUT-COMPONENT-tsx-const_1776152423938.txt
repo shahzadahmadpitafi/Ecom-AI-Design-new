@@ -1,0 +1,482 @@
+---
+
+## STEP 1 — NATURAL LANGUAGE EDIT INPUT COMPONENT
+
+```tsx
+const NaturalLanguageEditInput = ({ onApplyEdit, isApplying, disabled }) => {
+  const [editText, setEditText] = useState('');
+
+  const suggestions = [
+    'make the sleeves red',
+    'add a star on the chest',
+    'change collar to gold',
+    'remove brand logo',
+    'make it full sleeves',
+    'add number 10 on back',
+    'make body navy blue',
+    'add Pakistan flag on sleeve',
+    'make it sleeveless',
+    'change to white colorway',
+  ];
+
+  const handleSubmit = () => {
+    if (!editText.trim() || isApplying) return;
+    onApplyEdit(editText.trim());
+    setEditText('');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+
+  return (
+    <div style={{
+      background: '#0f0f0f',
+      border: '1px solid rgba(167,139,250,0.25)',
+      borderTop: '2px solid #a78bfa',
+      padding: '12px',
+    }}>
+      {/* Label */}
+      <div style={{
+        fontSize: '9px',
+        letterSpacing: '3px',
+        color: '#a78bfa',
+        textTransform: 'uppercase',
+        marginBottom: '8px',
+      }}>
+        ✏ Describe Your Edit
+      </div>
+
+      {/* Input row */}
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <input
+          type="text"
+          value={editText}
+          onChange={e => setEditText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          disabled={disabled || isApplying}
+          placeholder='e.g. "make the sleeves red and add a star on the chest"'
+          style={{
+            flex: 1,
+            background: '#1a1a1a',
+            border: '1px solid rgba(167,139,250,0.2)',
+            color: '#fff',
+            padding: '10px 12px',
+            fontSize: '12px',
+            outline: 'none',
+            borderRadius: 0,
+            fontFamily: 'Inter, sans-serif',
+          }}
+          onFocus={e => e.target.style.borderColor = '#a78bfa'}
+          onBlur={e => e.target.style.borderColor = 'rgba(167,139,250,0.2)'}
+        />
+        <button
+          onClick={handleSubmit}
+          disabled={!editText.trim() || isApplying || disabled}
+          style={{
+            background: editText.trim() && !isApplying ? '#a78bfa' : '#1a1a1a',
+            color: editText.trim() && !isApplying ? '#000' : '#444',
+            border: 'none',
+            padding: '10px 16px',
+            fontSize: '14px',
+            fontWeight: '700',
+            cursor: editText.trim() && !isApplying ? 'pointer' : 'not-allowed',
+            transition: 'all 0.15s',
+            minWidth: '44px',
+          }}
+        >
+          {isApplying ? '...' : '→'}
+        </button>
+      </div>
+
+      {/* Suggestion chips */}
+      <div style={{
+        display: 'flex',
+        gap: '6px',
+        flexWrap: 'wrap',
+        marginTop: '8px',
+      }}>
+        {suggestions.slice(0, 5).map(s => (
+          <button
+            key={s}
+            onClick={() => setEditText(s)}
+            style={{
+              background: 'transparent',
+              border: '1px solid rgba(167,139,250,0.2)',
+              color: '#555',
+              fontSize: '9px',
+              letterSpacing: '0.5px',
+              padding: '4px 8px',
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+              borderRadius: 0,
+            }}
+            onMouseEnter={e => {
+              (e.target as HTMLButtonElement).style.borderColor = 'rgba(167,139,250,0.5)';
+              (e.target as HTMLButtonElement).style.color = '#a78bfa';
+            }}
+            onMouseLeave={e => {
+              (e.target as HTMLButtonElement).style.borderColor = 'rgba(167,139,250,0.2)';
+              (e.target as HTMLButtonElement).style.color = '#555';
+            }}
+          >
+            {s}
+          </button>
+        ))}
+        {/* Show more toggle */}
+        <button
+          onClick={() => {/* toggle show all suggestions */}}
+          style={{
+            background: 'transparent',
+            border: '1px solid rgba(201,168,76,0.2)',
+            color: '#C9A84C',
+            fontSize: '9px',
+            padding: '4px 8px',
+            cursor: 'pointer',
+            borderRadius: 0,
+          }}
+        >
+          more...
+        </button>
+      </div>
+
+      {/* Helper text */}
+      <div style={{
+        fontSize: '9px',
+        color: '#333',
+        marginTop: '8px',
+        letterSpacing: '0.5px',
+      }}>
+        Press Enter or → to apply • Be specific for best results
+      </div>
+    </div>
+  );
+};
+```
+
+---
+
+## STEP 2 — HANDLE NATURAL LANGUAGE EDIT
+
+```typescript
+const handleNaturalLanguageEdit = async (editInstruction: string) => {
+  if (!generatedImageUrl && !viewCache[currentView]) {
+    toast.error('Generate a design first before editing');
+    return;
+  }
+
+  setIsApplyingEdit(true);
+  setEditLoadingMessage(editInstruction); // shows what's being applied
+
+  // Get current image as base64
+  const currentImageUrl = viewCache[currentView] || generatedImageUrl;
+  let currentImageBase64 = '';
+  let currentImageMimeType = 'image/png';
+
+  try {
+    // Convert current image to base64 for Gemini
+    if (currentImageUrl.startsWith('data:')) {
+      // Already base64
+      const parts = currentImageUrl.split(',');
+      currentImageMimeType = parts[0].split(':')[1].split(';')[0];
+      currentImageBase64 = parts[1];
+    } else {
+      // URL — fetch and convert
+      const response = await fetch('/api/fetch-image-base64', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: currentImageUrl }),
+      });
+      const data = await response.json();
+      currentImageBase64 = data.base64;
+      currentImageMimeType = data.mimeType;
+    }
+
+    // Build the edit prompt
+    const editPrompt = buildNaturalLanguageEditPrompt(editInstruction);
+
+    // Call edit API
+    const response = await fetch('/api/edit-design', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-gemini-key': localStorage.getItem('gemini_api_key') || '',
+      },
+      body: JSON.stringify({
+        currentImageBase64,
+        currentImageMimeType,
+        editPrompt,
+        editType: 'natural_language',
+        originalInstruction: editInstruction,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (data.imageUrl) {
+      // Save to history before replacing
+      setDesignHistory(prev => [{
+        imageUrl: viewCache[currentView] || generatedImageUrl,
+        prompt: `Before: "${editInstruction}"`,
+        timestamp: new Date(),
+        type: 'pre-edit',
+      }, ...prev].slice(0, 10));
+
+      // Update view cache and canvas
+      setViewCache(prev => ({ ...prev, [currentView]: data.imageUrl }));
+      setGeneratedImageUrl(data.imageUrl);
+      
+      // Add edited version to history
+      setDesignHistory(prev => [{
+        imageUrl: data.imageUrl,
+        prompt: `Edited: "${editInstruction}"`,
+        timestamp: new Date(),
+        type: 'edited',
+      }, ...prev].slice(0, 10));
+
+      toast.success(`Applied: "${editInstruction}"`, {
+        style: { background: '#1a1a1a', color: '#C9A84C', border: '1px solid rgba(201,168,76,0.3)' }
+      });
+    }
+  } catch (error) {
+    toast.error('Edit failed — try rephrasing your instruction');
+  } finally {
+    setIsApplyingEdit(false);
+    setEditLoadingMessage('');
+  }
+};
+```
+
+---
+
+## STEP 3 — SMART PROMPT BUILDER FOR NATURAL LANGUAGE EDITS
+
+```typescript
+const buildNaturalLanguageEditPrompt = (userInstruction: string) => {
+  return `You are editing an existing garment image.
+
+USER'S EDIT INSTRUCTION: "${userInstruction}"
+
+Apply this change to the garment in the image provided.
+
+CRITICAL RULES:
+- Only change what the user specifically asked to change
+- Keep EVERYTHING ELSE exactly the same:
+  • Same garment type and shape
+  • Same colors that weren't mentioned
+  • Same design elements that weren't mentioned
+  • Same lighting and background
+  • Same overall style and aesthetic
+- The result must look photorealistic — like a real manufactured garment
+- Dark background (#0a0a0a)
+- Professional product photography lighting
+- High resolution, realistic fabric texture
+
+Apply the change naturally as if the garment was originally manufactured this way.
+Do not add anything the user didn't ask for.
+Do not remove anything the user didn't ask to remove.`;
+};
+```
+
+---
+
+## STEP 4 — LOADING STATE FOR NATURAL LANGUAGE EDITS
+
+When a natural language edit is being applied, show a specific loading overlay:
+
+```tsx
+{isApplyingEdit && (
+  <div style={{
+    position: 'absolute',
+    inset: 0,
+    background: 'rgba(10,10,10,0.85)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  }}>
+    {/* Previous image faded behind */}
+    <img
+      src={viewCache[currentView] || generatedImageUrl}
+      style={{
+        position: 'absolute', inset: 0,
+        width: '100%', height: '100%',
+        objectFit: 'contain', opacity: 0.25,
+      }}
+    />
+
+    {/* Loading content */}
+    <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', padding: '24px' }}>
+      {/* Spinner */}
+      <div style={{
+        width: '40px', height: '40px',
+        border: '2px solid rgba(167,139,250,0.2)',
+        borderTop: '2px solid #a78bfa',
+        borderRadius: '50%',
+        animation: 'spin 1s linear infinite',
+        margin: '0 auto 16px',
+      }} />
+
+      {/* What's being applied */}
+      <div style={{
+        fontFamily: 'Bebas Neue',
+        fontSize: '14px',
+        letterSpacing: '2px',
+        color: '#a78bfa',
+        marginBottom: '8px',
+      }}>
+        APPLYING EDIT
+      </div>
+      <div style={{
+        fontSize: '11px',
+        color: '#C9A84C',
+        fontStyle: 'italic',
+        maxWidth: '240px',
+        lineHeight: 1.5,
+      }}>
+        "{editLoadingMessage}"
+      </div>
+
+      {/* Cycling sub-messages */}
+      <CyclingText
+        messages={[
+          'Reading your instruction...',
+          'Analyzing the garment...',
+          'Applying changes...',
+          'Preserving original design...',
+          'Finalizing edit...',
+        ]}
+        style={{ fontSize: '10px', color: '#555', marginTop: '12px' }}
+      />
+    </div>
+  </div>
+)}
+```
+
+---
+
+## STEP 5 — EDIT HISTORY IN SESSION HISTORY STRIP
+
+Update the session history thumbnails to show edit context:
+
+```tsx
+{designHistory.map((item, index) => (
+  <div
+    key={index}
+    onClick={() => restoreFromHistory(item)}
+    title={item.prompt}
+    style={{
+      position: 'relative',
+      cursor: 'pointer',
+      flexShrink: 0,
+    }}
+  >
+    <img
+      src={item.imageUrl}
+      style={{
+        width: '72px', height: '72px',
+        objectFit: 'cover',
+        border: `1px solid ${
+          item.type === 'edited' ? 'rgba(167,139,250,0.5)' :
+          item.type === 'pre-edit' ? 'rgba(255,100,100,0.3)' :
+          'rgba(201,168,76,0.3)'
+        }`,
+      }}
+    />
+    {/* Type label */}
+    <div style={{
+      position: 'absolute',
+      bottom: 0, left: 0, right: 0,
+      background: 'rgba(0,0,0,0.8)',
+      fontSize: '7px',
+      letterSpacing: '1px',
+      textAlign: 'center',
+      padding: '2px',
+      color: item.type === 'edited' ? '#a78bfa' :
+             item.type === 'pre-edit' ? '#ef4444' : '#C9A84C',
+    }}>
+      {item.type === 'edited' ? 'EDITED' :
+       item.type === 'pre-edit' ? 'BEFORE' : 'GENERATED'}
+    </div>
+  </div>
+))}
+```
+
+---
+
+## STEP 6 — ALSO CONNECT QUICK EDIT CHIPS TO NATURAL LANGUAGE
+
+The existing quick edit chips below the canvas should also use the natural language handler:
+
+```tsx
+const quickEdits = [
+  { label: '🎨 Change Color', prompt: 'change the main body color to ' },
+  { label: '🏷️ Replace Logo', prompt: 'remove the existing brand logo and replace with a clean design' },
+  { label: '📏 Full Sleeves', prompt: 'change to full long sleeves, keep everything else the same' },
+  { label: '📏 Half Sleeves', prompt: 'change to short half sleeves, keep everything else the same' },
+  { label: '❌ Remove Brand', prompt: 'remove all brand logos and markings from the garment' },
+];
+
+// When chip clicked:
+// - If prompt needs completion (like color): fill the input and focus it
+// - If prompt is complete: apply directly
+const handleQuickEditChip = (chip) => {
+  if (chip.prompt.endsWith(' ')) {
+    // Needs completion — fill input and focus
+    setNaturalLanguageInput(chip.prompt);
+    document.getElementById('nl-edit-input')?.focus();
+  } else {
+    // Complete — apply directly
+    handleNaturalLanguageEdit(chip.prompt);
+  }
+};
+```
+
+---
+
+## STEP 7 — /api/fetch-image-base64 ROUTE
+
+Create this helper route for converting URL images to base64:
+
+```typescript
+// /app/api/fetch-image-base64/route.ts
+export async function POST(req: NextRequest) {
+  const { imageUrl } = await req.json();
+
+  const response = await fetch(imageUrl);
+  const buffer = await response.arrayBuffer();
+  const base64 = Buffer.from(buffer).toString('base64');
+  const mimeType = response.headers.get('content-type') || 'image/png';
+
+  return NextResponse.json({ base64, mimeType });
+}
+```
+
+---
+
+## CHECKLIST
+- [ ] Natural language input appears below canvas after design is generated
+- [ ] Natural language input also appears at top of EDIT DESIGN right panel
+- [ ] Typing and pressing Enter applies the edit
+- [ ] → button applies the edit when clicked
+- [ ] Button disabled and grey when input is empty
+- [ ] Button purple and active when input has text
+- [ ] 5 suggestion chips shown below input
+- [ ] Clicking suggestion chip fills the input
+- [ ] "more..." chip expands to show all suggestions
+- [ ] Loading overlay shows previous image at 25% opacity during edit
+- [ ] Loading overlay shows the edit instruction in quotes in gold
+- [ ] Cycling sub-messages show during loading
+- [ ] After edit applied: success toast shows the instruction
+- [ ] History strip shows EDITED / BEFORE / GENERATED labels on thumbnails
+- [ ] Quick edit chips use natural language handler
+- [ ] Color chip fills input for completion
+- [ ] Full/Half sleeves chips apply directly without needing input
+- [ ] /api/fetch-image-base64 route works for URL images
+- [ ] Edit prompt preserves everything not mentioned by user
+- [ ] No console errors
+- [ ] Works on mobile (input full width, button below on small screens)

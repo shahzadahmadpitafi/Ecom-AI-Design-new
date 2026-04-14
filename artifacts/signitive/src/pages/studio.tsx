@@ -124,7 +124,21 @@ const EDIT_MESSAGES: Record<string, string[]> = {
   logos_remove:["Removing brand markings...", "Restoring fabric underneath...", "Cleaning garment surface..."],
   logos_add:   ["Placing your logo...", "Matching embroidery style...", "Integrating with fabric...", "Finalizing logo placement..."],
   structure:   ["Restructuring garment...", "Adjusting sleeve length...", "Reshaping garment...", "Applying structural changes..."],
+  natural:     ["Reading your instruction...", "Analyzing the garment...", "Applying changes...", "Preserving original design...", "Finalizing edit..."],
 };
+
+const NL_SUGGESTIONS = [
+  "make the sleeves red",
+  "add a star on the chest",
+  "change collar to gold",
+  "remove brand logo",
+  "make it full sleeves",
+  "add number 10 on back",
+  "make body navy blue",
+  "add Pakistan flag on sleeve",
+  "make it sleeveless",
+  "change to white colorway",
+];
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -574,6 +588,11 @@ export default function Studio() {
   // ── Mobile drawer ──
   const [showMobileDrawer, setShowMobileDrawer] = useState(false);
 
+  // ── Natural language edit state ──
+  const [nlEditText, setNlEditText]           = useState("");
+  const [nlInstruction, setNlInstruction]     = useState(""); // shown in overlay
+  const [showAllNlSuggestions, setShowAllNlSuggestions] = useState(false);
+
   // ── Edit panel state ──
   const [editTab, setEditTab]                 = useState<"colors"|"logos"|"structure">("colors");
   const [isEditing, setIsEditing]             = useState(false);
@@ -974,6 +993,90 @@ export default function Studio() {
     toast({ title: "Undo applied" });
   };
 
+  // ── Natural language edit ──
+  const handleNaturalLanguageEdit = async (instruction: string) => {
+    if (!generatedImageUrl) {
+      toast({ title: "Generate a design first", description: "Then describe your edit below.", variant: "destructive" }); return;
+    }
+    if (!instruction.trim()) return;
+
+    const editPrompt = `You are editing an existing garment image.
+
+USER'S EDIT INSTRUCTION: "${instruction}"
+
+Apply this change to the garment in the image provided.
+
+CRITICAL RULES:
+- Only change what the user specifically asked to change
+- Keep EVERYTHING ELSE exactly the same: same garment shape, same colors that weren't mentioned, same design elements, same lighting and background, same overall aesthetic
+- The result must look photorealistic — like a real manufactured garment
+- Dark background (#0a0a0a), professional product photography lighting, high resolution, realistic fabric texture
+- Apply the change naturally as if the garment was originally manufactured this way
+- Do not add anything the user didn't ask for. Do not remove anything the user didn't ask to remove.`;
+
+    // Pollinations fallback: bake instruction into the regeneration prompt
+    const applyNlWithPollinations = async (): Promise<string> => {
+      const base = currentPromptRef.current || prompt.trim();
+      const combined = [base, instruction, "apparel graphic design, professional product mockup, dark background, high quality"].filter(Boolean).join(", ");
+      const seed = Math.floor(Math.random() * 99999);
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(combined)}?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
+      await new Promise<void>((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve();
+        img.onerror = () => resolve();
+        img.src = url;
+        setTimeout(() => resolve(), 45000);
+      });
+      return url;
+    };
+
+    setEditMsgSet(EDIT_MESSAGES.natural);
+    setNlInstruction(instruction);
+    const lbl: "Generated"|"Edited" = undoStack.length===0?"Generated":"Edited";
+    setUndoStack(prev => [{ id:Date.now().toString(), prompt, imageUrl:generatedImageUrl!, timestamp:Date.now(), label:lbl }, ...prev].slice(0,10));
+    setIsEditing(true);
+
+    try {
+      const imageData = getImageBase64();
+      if (geminiKey && imageData) {
+        const res = await fetch("/api/edit-design", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-gemini-key": geminiKey },
+          body: JSON.stringify({ currentImageBase64: imageData.base64, currentImageMimeType: imageData.mimeType, editPrompt }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (data.imageUrl) {
+          setGeneratedImageUrl(data.imageUrl);
+          setViewCache(prev => ({ ...prev, [currentView]: data.imageUrl }));
+          addToHistory(instruction, data.imageUrl, "Edited");
+          toast({ title: "Edit applied!", description: `"${instruction}"` });
+          return;
+        }
+        if (data.code === "INVALID_KEY" || data.code === "NO_API_KEY") {
+          setUndoStack(prev => prev.slice(1));
+          setApiKeyOpen(true);
+          toast({ title: "API key issue", description: data.error, variant: "destructive" }); return;
+        }
+        if (data.code === "RATE_LIMIT") {
+          setUndoStack(prev => prev.slice(1));
+          toast({ title: "Rate limit", description: data.error, variant: "destructive" }); return;
+        }
+        toast({ title: "Switching to AI regeneration", description: "Applying edit via free AI...", variant: "default" });
+      }
+      const newUrl = await applyNlWithPollinations();
+      setGeneratedImageUrl(newUrl);
+      setViewCache(prev => ({ ...prev, [currentView]: newUrl }));
+      addToHistory(instruction, newUrl, "Edited");
+      toast({ title: "Edit applied!", description: `"${instruction}"` });
+    } catch (err: any) {
+      setUndoStack(prev => prev.slice(1));
+      toast({ title: "Edit failed", description: err.message || "Try again", variant: "destructive" });
+    } finally {
+      setIsEditing(false);
+      setNlInstruction("");
+    }
+  };
+
   const handleEditQuickChip = (type: string) => {
     if (type==="color") setEditTab("colors");
     else if (type==="logo") { setEditTab("logos"); setRemoveBrand(false); }
@@ -1197,6 +1300,12 @@ export default function Studio() {
                 <p className="font-display text-sm tracking-widest uppercase relative z-10" style={{ color: "#a78bfa" }}>
                   {isEditing ? currentEditMsg : GENERATING_MESSAGES[genMessageIdx]}
                 </p>
+                {/* Show NL instruction text during natural language edit */}
+                {nlInstruction && (
+                  <p className="text-[11px] mt-2 px-6 text-center relative z-10 italic leading-relaxed" style={{ color: "#C9A84C", maxWidth: "260px" }}>
+                    "{nlInstruction}"
+                  </p>
+                )}
                 {/* Progress bar */}
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden">
                   <div className="h-full w-1/2 animate-gen-progress" style={{ background: "linear-gradient(90deg, transparent, #C9A84C, transparent)" }} />
@@ -1290,28 +1399,53 @@ export default function Studio() {
             <span className="text-[11px] text-[#555] w-10 text-center">{Math.round(zoom*100)}%</span>
           </div>
 
-          {/* Quick edit chips (post-generation) */}
-          {hasGeneratedImage && !isGenerating && !isEditing && (
-            <div className="mt-4 flex flex-wrap gap-2 justify-center max-w-sm">
-              <p className="w-full text-center text-[9px] uppercase tracking-widest text-[#333] mb-1">Quick Edits</p>
-              {[
-                { label:"🎨 Change Color", type:"color"        },
-                { label:"🏷️ Replace Logo", type:"logo"         },
-                { label:"📏 Full Sleeves", type:"full-sleeve"  },
-                { label:"📏 Half Sleeves", type:"half-sleeve"  },
-                { label:"❌ Remove Brand", type:"remove-brand" },
-              ].map(chip => (
-                <button key={chip.type} onClick={() => {
-                  handleEditQuickChip(chip.type);
-                  rightPanelRef.current?.scrollTo({ top: rightPanelRef.current.scrollHeight, behavior: "smooth" });
-                }}
-                  className="px-2.5 py-1.5 text-[10px] uppercase tracking-wider border transition-all"
-                  style={{ border:"1px solid rgba(167,139,250,0.3)", color:"#a78bfa" }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(167,139,250,0.08)"; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
-                  {chip.label}
-                </button>
-              ))}
+          {/* Natural language edit input — below canvas (Place 1) */}
+          {hasGeneratedImage && !isGenerating && (
+            <div className="w-full max-w-sm mt-4" style={{ border: "1px solid rgba(167,139,250,0.2)", borderTop: "2px solid #a78bfa", background: "#0f0f0f" }}>
+              <div className="px-3 pt-3 pb-1">
+                <p className="text-[9px] uppercase tracking-widest mb-2" style={{ color: "#a78bfa" }}>✏ Describe Your Edit</p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={nlEditText}
+                    onChange={e => setNlEditText(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && nlEditText.trim() && !isEditing) { handleNaturalLanguageEdit(nlEditText.trim()); setNlEditText(""); } }}
+                    disabled={isEditing}
+                    placeholder='e.g. "make the sleeves red"'
+                    className="flex-1 text-[12px] bg-[#1a1a1a] text-white px-3 py-2 outline-none"
+                    style={{ border: "1px solid rgba(167,139,250,0.2)", fontFamily: "Inter, sans-serif" }}
+                    onFocus={e => (e.target.style.borderColor = "#a78bfa")}
+                    onBlur={e => (e.target.style.borderColor = "rgba(167,139,250,0.2)")}
+                  />
+                  <button
+                    onClick={() => { if (nlEditText.trim() && !isEditing) { handleNaturalLanguageEdit(nlEditText.trim()); setNlEditText(""); } }}
+                    disabled={!nlEditText.trim() || isEditing}
+                    className="px-4 text-sm font-bold transition-all"
+                    style={{ background: nlEditText.trim() && !isEditing ? "#a78bfa" : "#1a1a1a", color: nlEditText.trim() && !isEditing ? "#000" : "#444", cursor: nlEditText.trim() && !isEditing ? "pointer" : "not-allowed" }}>
+                    {isEditing ? "..." : "→"}
+                  </button>
+                </div>
+                {/* Suggestion chips */}
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {(showAllNlSuggestions ? NL_SUGGESTIONS : NL_SUGGESTIONS.slice(0, 5)).map(s => (
+                    <button key={s} onClick={() => setNlEditText(s)}
+                      className="text-[9px] px-2 py-1 transition-all"
+                      style={{ border: "1px solid rgba(167,139,250,0.2)", color: "#555", background: "transparent" }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(167,139,250,0.5)"; (e.currentTarget as HTMLElement).style.color = "#a78bfa"; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(167,139,250,0.2)"; (e.currentTarget as HTMLElement).style.color = "#555"; }}>
+                      {s}
+                    </button>
+                  ))}
+                  <button onClick={() => setShowAllNlSuggestions(v => !v)}
+                    className="text-[9px] px-2 py-1"
+                    style={{ border: "1px solid rgba(201,168,76,0.25)", color: "#C9A84C", background: "transparent" }}>
+                    {showAllNlSuggestions ? "less" : "more..."}
+                  </button>
+                </div>
+                <p className="text-[9px] mt-2 pb-2" style={{ color: "#333", letterSpacing: "0.5px" }}>
+                  Press Enter or → to apply · Be specific for best results
+                </p>
+              </div>
             </div>
           )}
 
@@ -1535,6 +1669,45 @@ export default function Studio() {
                           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#666"; }}>
                           <X className="h-3 w-3" />
                         </button>
+                      </div>
+                    </div>
+
+                    {/* Natural language edit — right panel (Place 2) */}
+                    <div style={{ border: "1px solid rgba(167,139,250,0.2)", borderTop: "2px solid #a78bfa", background: "#0a0a0a", marginBottom: "12px" }}>
+                      <div className="px-3 pt-3 pb-2">
+                        <p className="text-[9px] uppercase tracking-widest mb-2" style={{ color: "#a78bfa" }}>✏ Describe Your Edit</p>
+                        <div className="flex gap-1.5">
+                          <input
+                            type="text"
+                            value={nlEditText}
+                            onChange={e => setNlEditText(e.target.value)}
+                            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && nlEditText.trim() && !isEditing) { handleNaturalLanguageEdit(nlEditText.trim()); setNlEditText(""); } }}
+                            disabled={isEditing}
+                            placeholder='"make the sleeves red..."'
+                            className="flex-1 text-[11px] bg-[#1a1a1a] text-white px-2 py-2 outline-none"
+                            style={{ border: "1px solid rgba(167,139,250,0.2)", fontFamily: "Inter, sans-serif" }}
+                            onFocus={e => (e.target.style.borderColor = "#a78bfa")}
+                            onBlur={e => (e.target.style.borderColor = "rgba(167,139,250,0.2)")}
+                          />
+                          <button
+                            onClick={() => { if (nlEditText.trim() && !isEditing) { handleNaturalLanguageEdit(nlEditText.trim()); setNlEditText(""); } }}
+                            disabled={!nlEditText.trim() || isEditing}
+                            className="px-3 text-sm font-bold transition-all"
+                            style={{ background: nlEditText.trim() && !isEditing ? "#a78bfa" : "#1a1a1a", color: nlEditText.trim() && !isEditing ? "#000" : "#444" }}>
+                            {isEditing ? "..." : "→"}
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {NL_SUGGESTIONS.slice(0, 4).map(s => (
+                            <button key={s} onClick={() => setNlEditText(s)}
+                              className="text-[8px] px-1.5 py-0.5 transition-all"
+                              style={{ border: "1px solid rgba(167,139,250,0.18)", color: "#444", background: "transparent" }}
+                              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#a78bfa"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(167,139,250,0.4)"; }}
+                              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#444"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(167,139,250,0.18)"; }}>
+                              {s}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
 
