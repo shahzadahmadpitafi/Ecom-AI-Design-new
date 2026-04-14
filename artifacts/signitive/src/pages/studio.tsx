@@ -540,6 +540,11 @@ export default function Studio() {
   const [viewSwitchMsgIdx, setViewSwitchMsgIdx] = useState(0);
   const [currentPrompt, setCurrentPrompt]     = useState("");
   const [currentStyleModifiers, setCurrentStyleModifiers] = useState<string[]>([]);
+  // Refs for stable values inside async closures (avoids stale state)
+  const currentPromptRef              = useRef("");
+  const currentStyleModifiersRef      = useRef<string[]>([]);
+  const garmentTypeRef                = useRef("t-shirt");
+  const garmentColorRef               = useRef("Black");
 
   // ── Upload ──
   const [uploadedImage, setUploadedImage]     = useState<string | null>(null);
@@ -659,29 +664,23 @@ export default function Studio() {
     return "";
   };
 
-  // ── View-switch generate (Gemini or Pollinations, for non-front views) ──
+  // ── View-switch generate via Pollinations (no crossOrigin needed — just display URL) ──
   const generateViewWithPollinations = async (viewPrompt: string, view: string): Promise<string> => {
-    const styleParts = STYLE_TAGS.filter(t => currentStyleModifiers.includes(t.label)).map(t => t.prompt).join(", ");
-    const full = [viewPrompt, styleParts, `${view} view`, "apparel graphic design, professional product mockup, dark background, high quality"].filter(Boolean).join(", ");
+    const styles = currentStyleModifiersRef.current;
+    const styleParts = STYLE_TAGS.filter(t => styles.includes(t.label)).map(t => t.prompt).join(", ");
+    const promptBase = viewPrompt || currentPromptRef.current;
+    const full = [promptBase, styleParts, `${view} view`, "apparel graphic design, professional product mockup, dark background, high quality"].filter(Boolean).join(", ");
     const seed = Math.floor(Math.random() * 99999);
     const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(full)}?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    await new Promise<void>((resolve, reject) => {
+    // Load without crossOrigin so CORS never blocks it; we just need the URL for display
+    await new Promise<void>((resolve) => {
+      const img = new Image();
       img.onload = () => resolve();
-      img.onerror = () => reject(new Error("Failed to load image"));
+      img.onerror = () => resolve(); // resolve anyway — browser will still display the URL
       img.src = url;
-      setTimeout(() => reject(new Error("Timeout")), 45000);
+      setTimeout(() => resolve(), 45000);
     });
-    try {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth || 1024;
-      canvas.height = img.naturalHeight || 1024;
-      canvas.getContext("2d")!.drawImage(img, 0, 0);
-      return canvas.toDataURL("image/jpeg", 0.92);
-    } catch {
-      return url;
-    }
+    return url;
   };
 
   // ── Handle view tab click ──
@@ -698,15 +697,22 @@ export default function Studio() {
     }
 
     const prevImageUrl = generatedImageUrl;
+    const prevView = currentView; // capture for rollback
     setIsViewSwitching(true);
     const viewKey = newView.toLowerCase();
+
+    // Read stable values from refs (avoids stale closure issue)
+    const prompt = currentPromptRef.current;
+    const styles = currentStyleModifiersRef.current;
+    const gType  = garmentTypeRef.current;
+    const gColor = garmentColorRef.current;
 
     try {
       if (geminiKey) {
         const res = await fetch("/api/generate-design", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-gemini-key": geminiKey },
-          body: JSON.stringify({ prompt: currentPrompt, styleModifiers: currentStyleModifiers, garmentType, garmentColor: garmentColor.label, view: viewKey }),
+          body: JSON.stringify({ prompt, styleModifiers: styles, garmentType: gType, garmentColor: gColor, view: viewKey }),
         });
         const resData = await res.json().catch(() => ({}));
         if (res.ok && resData.imageUrl) {
@@ -715,12 +721,13 @@ export default function Studio() {
           return;
         }
       }
-      const imgUrl = await generateViewWithPollinations(currentPrompt, viewKey);
+      // Pollinations fallback — no CORS constraint, returns URL for display
+      const imgUrl = await generateViewWithPollinations(prompt, viewKey);
       setViewCache(prev => ({ ...prev, [newView]: imgUrl }));
       setGeneratedImageUrl(imgUrl);
     } catch {
-      setCurrentView(currentView);
-      setActiveAngle(currentView);
+      setCurrentView(prevView);
+      setActiveAngle(prevView);
       setGeneratedImageUrl(prevImageUrl);
       toast({ title: "Could not load this view", description: "Please try again.", variant: "destructive" });
     } finally {
@@ -775,6 +782,11 @@ export default function Studio() {
     const savedStyles = [...selectedStyles];
     setCurrentPrompt(savedPrompt);
     setCurrentStyleModifiers(savedStyles);
+    // Keep refs in sync so async closures always read the latest values
+    currentPromptRef.current = savedPrompt;
+    currentStyleModifiersRef.current = savedStyles;
+    garmentTypeRef.current = garmentType;
+    garmentColorRef.current = garmentColor.label;
 
     const productSuffix = selectedProductData ? ` on a ${garmentColor.label} ${selectedProductData.name}` : "";
     const promptWithProduct = finalPrompt + productSuffix;
