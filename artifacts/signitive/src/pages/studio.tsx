@@ -129,16 +129,140 @@ const EDIT_MESSAGES: Record<string, string[]> = {
 
 const NL_SUGGESTIONS = [
   "make the sleeves red",
-  "add a star on the chest",
-  "change collar to gold",
-  "remove brand logo",
-  "make it full sleeves",
-  "add number 10 on back",
-  "make body navy blue",
-  "add Pakistan flag on sleeve",
+  "make the collar gold",
+  "make the body navy blue",
+  "make the cuffs white",
+  "remove all brand logos",
+  "add number 10 on the back",
+  "change side stripes to gold",
   "make it sleeveless",
-  "change to white colorway",
+  "add Pakistan flag on left sleeve",
+  "change collar to polo collar",
 ];
+
+const NL_PLACEHOLDERS = [
+  '"make the sleeves red"',
+  '"change the collar to gold"',
+  '"make the body navy blue"',
+  '"add a star on the left chest"',
+  '"remove brand logos"',
+  '"change cuffs to white"',
+];
+
+// ── NL edit intelligence ──
+const extractColor = (instruction: string): string => {
+  const colors = ["red","blue","green","black","white","gold","navy","purple","yellow","orange","pink","grey","gray","teal","maroon","cyan","silver","brown","cream","beige"];
+  return colors.find(c => instruction.toLowerCase().includes(c)) || "the new color";
+};
+
+interface EditAnalysis {
+  targetParts: string[];
+  changeType: "color"|"logo"|"structure"|"text"|"pattern";
+  isSpecificPart: boolean;
+}
+
+const analyzeEditInstruction = (instruction: string): EditAnalysis => {
+  const lower = instruction.toLowerCase();
+  const partKeywords: Record<string, string[]> = {
+    sleeves:  ["sleeve","sleeves","arm","arms"],
+    collar:   ["collar","neck","neckline"],
+    body:     ["body","chest","front panel","back panel","torso","main panel"],
+    cuffs:    ["cuff","cuffs","wrist"],
+    logo:     ["logo","brand","badge","emblem","adidas","nike","puma"],
+    number:   ["number","jersey number","shirt number"],
+    stripes:  ["stripe","stripes","side panel","side stripe","accent"],
+    shoulder: ["shoulder","shoulders"],
+    hem:      ["hem","bottom","waistband"],
+  };
+  const targetParts: string[] = [];
+  for (const [part, kws] of Object.entries(partKeywords)) {
+    if (kws.some(kw => lower.includes(kw))) targetParts.push(part);
+  }
+  const changeType =
+    /color|colour|red|blue|green|black|white|gold|navy|purple|yellow|orange|pink|grey|gray/i.test(instruction) ? "color" :
+    /logo|brand|badge|emblem/i.test(instruction)                                                                  ? "logo" :
+    /sleeve|sleeveless|collar|fit|length/i.test(instruction)                                                      ? "structure" :
+    /number|text|name|font/i.test(instruction)                                                                    ? "text" : "pattern";
+  return { targetParts, changeType, isSpecificPart: targetParts.length > 0 };
+};
+
+const buildPreciseEditPrompt = (userInstruction: string): string => {
+  const analysis = analyzeEditInstruction(userInstruction);
+  const partDescriptions: Record<string, string> = {
+    sleeves:  "ONLY the sleeve panels (the fabric covering the arms from shoulder seam to cuff). Do NOT touch the front body panel, back body panel, collar, or any other part.",
+    collar:   "ONLY the collar/neckline area. Do NOT touch the body, sleeves, or any other part.",
+    body:     "ONLY the main body panel (front/back chest area). Do NOT touch the sleeves, collar, or any other part.",
+    cuffs:    "ONLY the cuff area at the end of the sleeves. Do NOT touch the sleeve body, main body, collar, or any other part.",
+    logo:     "ONLY the logo/badge/emblem. Do NOT change any colors or other design elements.",
+    stripes:  "ONLY the stripe/accent areas. Do NOT touch the main body color, sleeves, collar, or any other part.",
+    shoulder: "ONLY the shoulder yoke area. Do NOT touch the main body, sleeves, or any other part.",
+    number:   "ONLY the number/text element on the garment. Do NOT change any colors, logos, or other elements.",
+    hem:      "ONLY the hem/waistband area at the bottom. Do NOT touch body, sleeves, collar, or any other part.",
+  };
+
+  if (analysis.isSpecificPart) {
+    const targetDesc = analysis.targetParts.map(p => partDescriptions[p] || p).join("\n");
+    return `You are making a HIGHLY PRECISE surgical edit to this garment image.
+
+EDIT INSTRUCTION: "${userInstruction}"
+
+EXACT TARGET:
+${targetDesc}
+
+STRICT PRESERVATION RULES:
+- The main body/front panel color must remain EXACTLY as it is in the input image
+- Every color that is NOT on the target part must remain EXACTLY the same
+- Every logo, badge, number, and text element must remain EXACTLY the same
+- The garment silhouette and shape must remain EXACTLY the same
+- The background must remain dark/black exactly as in the input
+- The lighting and shadows must remain consistent
+
+MENTAL MODEL: Imagine using Photoshop with a precise selection mask. You have selected ONLY ${analysis.targetParts.join(" and ")}. Everything outside this selection is completely locked and cannot change.
+
+Apply: ${userInstruction}
+Only to: ${analysis.targetParts.join(" and ")}
+Preserve: literally everything else
+
+Output: photorealistic garment, dark background, professional product photography.`;
+  }
+
+  // Generic fallback — list explicit preserve items
+  const mentionsSleeves  = /sleeve|arm/i.test(userInstruction);
+  const mentionsCollar   = /collar|neck/i.test(userInstruction);
+  const mentionsBody     = /body|chest|front|back|panel|torso/i.test(userInstruction);
+  const mentionsCuffs    = /cuff|wrist/i.test(userInstruction);
+  const mentionsLogo     = /logo|brand|badge|emblem/i.test(userInstruction);
+  const mentionsNumber   = /number|jersey num/i.test(userInstruction);
+  const mentionsStripes  = /stripe|side panel|accent/i.test(userInstruction);
+  const preserveList: string[] = [];
+  if (!mentionsSleeves) preserveList.push("sleeves (keep their EXACT current color, pattern, and design)");
+  if (!mentionsCollar)  preserveList.push("collar (keep its EXACT current color and style)");
+  if (!mentionsBody)    preserveList.push("body/chest/front panel (keep its EXACT current color and design)");
+  if (!mentionsCuffs)   preserveList.push("cuffs (keep their EXACT current color)");
+  if (!mentionsLogo)    preserveList.push("all logos, badges, and emblems (keep them exactly as they are)");
+  if (!mentionsNumber)  preserveList.push("any numbers or text on the garment (keep them exactly as they are)");
+  if (!mentionsStripes) preserveList.push("all stripes, accents, and side panels (keep their EXACT current colors)");
+
+  return `You are making a SURGICAL EDIT to this garment image.
+
+WHAT TO CHANGE: "${userInstruction}"
+
+WHAT TO ABSOLUTELY NOT CHANGE (preserve these EXACTLY as they appear in the image):
+${preserveList.map(p => `• ${p}`).join("\n")}
+
+CRITICAL RULES:
+1. ONLY modify the specific part(s) the user mentioned
+2. Every other part of the garment must be PIXEL-PERFECT identical to the input image
+3. The change must look naturally manufactured
+4. Same lighting, same shadows, same fabric texture on unchanged parts
+5. Same background (dark/black)
+6. Same garment shape and silhouette
+7. Do NOT reinterpret the overall design — only apply the one specific change
+
+Think of this as Photoshop — you are using a selection mask on ONLY the mentioned part. Everything outside the selection stays untouched.
+
+Output: photorealistic garment on dark background, professional studio lighting.`;
+};
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -592,6 +716,8 @@ export default function Studio() {
   const [nlEditText, setNlEditText]           = useState("");
   const [nlInstruction, setNlInstruction]     = useState(""); // shown in overlay
   const [showAllNlSuggestions, setShowAllNlSuggestions] = useState(false);
+  const [placeholderIdx, setPlaceholderIdx]   = useState(0);
+  const [showPartClarification, setShowPartClarification] = useState<{ instruction: string; color: string } | null>(null);
 
   // ── Edit panel state ──
   const [editTab, setEditTab]                 = useState<"colors"|"logos"|"structure">("colors");
@@ -646,6 +772,12 @@ export default function Studio() {
   const notifyKeyChange = () => {
     window.dispatchEvent(new Event("storage"));
   };
+
+  // ── Rotate NL input placeholder every 3s ──
+  useEffect(() => {
+    const id = setInterval(() => setPlaceholderIdx(i => (i + 1) % NL_PLACEHOLDERS.length), 3000);
+    return () => clearInterval(id);
+  }, []);
 
   const getImageBase64 = (): { base64: string; mimeType: string } | null => {
     if (!generatedImageUrl) return null;
@@ -993,26 +1125,15 @@ export default function Studio() {
     toast({ title: "Undo applied" });
   };
 
-  // ── Natural language edit ──
-  const handleNaturalLanguageEdit = async (instruction: string) => {
+  // ── Natural language edit (core — skips clarification check) ──
+  const applyNlEdit = async (instruction: string) => {
     if (!generatedImageUrl) {
       toast({ title: "Generate a design first", description: "Then describe your edit below.", variant: "destructive" }); return;
     }
     if (!instruction.trim()) return;
 
-    const editPrompt = `You are editing an existing garment image.
-
-USER'S EDIT INSTRUCTION: "${instruction}"
-
-Apply this change to the garment in the image provided.
-
-CRITICAL RULES:
-- Only change what the user specifically asked to change
-- Keep EVERYTHING ELSE exactly the same: same garment shape, same colors that weren't mentioned, same design elements, same lighting and background, same overall aesthetic
-- The result must look photorealistic — like a real manufactured garment
-- Dark background (#0a0a0a), professional product photography lighting, high resolution, realistic fabric texture
-- Apply the change naturally as if the garment was originally manufactured this way
-- Do not add anything the user didn't ask for. Do not remove anything the user didn't ask to remove.`;
+    const analysis = analyzeEditInstruction(instruction);
+    const editPrompt = buildPreciseEditPrompt(instruction);
 
     // Pollinations fallback: bake instruction into the regeneration prompt
     const applyNlWithPollinations = async (): Promise<string> => {
@@ -1049,7 +1170,8 @@ CRITICAL RULES:
           setGeneratedImageUrl(data.imageUrl);
           setViewCache(prev => ({ ...prev, [currentView]: data.imageUrl }));
           addToHistory(instruction, data.imageUrl, "Edited");
-          toast({ title: "Edit applied!", description: `"${instruction}"` });
+          const parts = analysis.targetParts.length > 0 ? `Changed: ${analysis.targetParts.join(" + ")}` : "Edit applied";
+          toast({ title: parts, description: `"${instruction}"` });
           return;
         }
         if (data.code === "INVALID_KEY" || data.code === "NO_API_KEY") {
@@ -1067,7 +1189,8 @@ CRITICAL RULES:
       setGeneratedImageUrl(newUrl);
       setViewCache(prev => ({ ...prev, [currentView]: newUrl }));
       addToHistory(instruction, newUrl, "Edited");
-      toast({ title: "Edit applied!", description: `"${instruction}"` });
+      const parts2 = analysis.targetParts.length > 0 ? `Changed: ${analysis.targetParts.join(" + ")}` : "Edit applied";
+      toast({ title: parts2, description: `"${instruction}"` });
     } catch (err: any) {
       setUndoStack(prev => prev.slice(1));
       toast({ title: "Edit failed", description: err.message || "Try again", variant: "destructive" });
@@ -1075,6 +1198,16 @@ CRITICAL RULES:
       setIsEditing(false);
       setNlInstruction("");
     }
+  };
+
+  // ── handleNaturalLanguageEdit: does clarification check then delegates to applyNlEdit ──
+  const handleNaturalLanguageEdit = async (instruction: string) => {
+    const analysis = analyzeEditInstruction(instruction);
+    if (!analysis.isSpecificPart && analysis.changeType === "color") {
+      setShowPartClarification({ instruction, color: extractColor(instruction) });
+      return;
+    }
+    await applyNlEdit(instruction);
   };
 
   const handleEditQuickChip = (type: string) => {
@@ -1411,7 +1544,7 @@ CRITICAL RULES:
                     onChange={e => setNlEditText(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && nlEditText.trim() && !isEditing) { handleNaturalLanguageEdit(nlEditText.trim()); setNlEditText(""); } }}
                     disabled={isEditing}
-                    placeholder='e.g. "make the sleeves red"'
+                    placeholder={NL_PLACEHOLDERS[placeholderIdx]}
                     className="flex-1 text-[12px] bg-[#1a1a1a] text-white px-3 py-2 outline-none"
                     style={{ border: "1px solid rgba(167,139,250,0.2)", fontFamily: "Inter, sans-serif" }}
                     onFocus={e => (e.target.style.borderColor = "#a78bfa")}
@@ -1425,6 +1558,34 @@ CRITICAL RULES:
                     {isEditing ? "..." : "→"}
                   </button>
                 </div>
+                {/* Part clarification UI */}
+                {showPartClarification && (
+                  <div className="mt-2" style={{ background: "#111", border: "1px solid rgba(201,168,76,0.3)", padding: "10px" }}>
+                    <p className="text-[9px] uppercase tracking-widest mb-2" style={{ color: "#C9A84C" }}>
+                      WHICH PART? — Make {showPartClarification.color} on...
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {["Sleeves","Body / Chest","Collar","Cuffs","Side Stripes","Full Garment"].map(part => (
+                        <button key={part} onClick={() => {
+                          const refined = `make the ${part.toLowerCase()} ${showPartClarification.color}`;
+                          setShowPartClarification(null);
+                          applyNlEdit(refined);
+                        }}
+                          className="text-[10px] px-3 py-1.5 transition-all"
+                          style={{ background: "transparent", border: "1px solid rgba(167,139,250,0.4)", color: "#a78bfa", cursor: "pointer", letterSpacing: "0.5px" }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(167,139,250,0.08)"; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
+                          {part}
+                        </button>
+                      ))}
+                      <button onClick={() => setShowPartClarification(null)}
+                        className="text-[10px] px-3 py-1.5"
+                        style={{ background: "transparent", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444", cursor: "pointer" }}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {/* Suggestion chips */}
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {(showAllNlSuggestions ? NL_SUGGESTIONS : NL_SUGGESTIONS.slice(0, 5)).map(s => (
@@ -1443,7 +1604,7 @@ CRITICAL RULES:
                   </button>
                 </div>
                 <p className="text-[9px] mt-2 pb-2" style={{ color: "#333", letterSpacing: "0.5px" }}>
-                  Press Enter or → to apply · Be specific for best results
+                  Say which part to change · Press Enter or → to apply
                 </p>
               </div>
             </div>
@@ -1683,7 +1844,7 @@ CRITICAL RULES:
                             onChange={e => setNlEditText(e.target.value)}
                             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && nlEditText.trim() && !isEditing) { handleNaturalLanguageEdit(nlEditText.trim()); setNlEditText(""); } }}
                             disabled={isEditing}
-                            placeholder='"make the sleeves red..."'
+                            placeholder={NL_PLACEHOLDERS[placeholderIdx]}
                             className="flex-1 text-[11px] bg-[#1a1a1a] text-white px-2 py-2 outline-none"
                             style={{ border: "1px solid rgba(167,139,250,0.2)", fontFamily: "Inter, sans-serif" }}
                             onFocus={e => (e.target.style.borderColor = "#a78bfa")}
@@ -1697,6 +1858,32 @@ CRITICAL RULES:
                             {isEditing ? "..." : "→"}
                           </button>
                         </div>
+                        {/* Part clarification UI — right panel */}
+                        {showPartClarification && (
+                          <div className="mt-2" style={{ background: "#0f0f0f", border: "1px solid rgba(201,168,76,0.3)", padding: "8px" }}>
+                            <p className="text-[8px] uppercase tracking-widest mb-1.5" style={{ color: "#C9A84C" }}>
+                              WHICH PART? — {showPartClarification.color}
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {["Sleeves","Body","Collar","Cuffs","Side Stripes","Full Garment"].map(part => (
+                                <button key={part} onClick={() => {
+                                  const refined = `make the ${part.toLowerCase()} ${showPartClarification.color}`;
+                                  setShowPartClarification(null);
+                                  applyNlEdit(refined);
+                                }}
+                                  className="text-[9px] px-2 py-1"
+                                  style={{ background: "transparent", border: "1px solid rgba(167,139,250,0.35)", color: "#a78bfa", cursor: "pointer" }}>
+                                  {part}
+                                </button>
+                              ))}
+                              <button onClick={() => setShowPartClarification(null)}
+                                className="text-[9px] px-2 py-1"
+                                style={{ background: "transparent", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444", cursor: "pointer" }}>
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+                        )}
                         <div className="flex flex-wrap gap-1 mt-2">
                           {NL_SUGGESTIONS.slice(0, 4).map(s => (
                             <button key={s} onClick={() => setNlEditText(s)}

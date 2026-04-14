@@ -1,0 +1,341 @@
+Fix the natural language edit precision. When user says "make the sleeves red" only the sleeves should change — not the entire garment. The AI is currently recoloring the whole garment instead of the specific part mentioned.
+
+---
+
+## THE ROOT CAUSE
+
+The edit prompt is not specific enough about what to PRESERVE. Gemini is interpreting "make the sleeves red" too broadly and recoloring the entire front panel. The fix is a much more precise and restrictive prompt engineering approach.
+
+---
+
+## STEP 1 — COMPLETELY REWRITE THE EDIT PROMPT BUILDER
+
+Replace the existing buildNaturalLanguageEditPrompt with this:
+
+```typescript
+const buildNaturalLanguageEditPrompt = (userInstruction: string) => {
+  
+  // Parse what the user wants to change
+  // Detect body parts mentioned
+  const mentionsSleeves = /sleeve|arm/i.test(userInstruction);
+  const mentionsCollar = /collar|neck/i.test(userInstruction);
+  const mentionsBody = /body|chest|front|back|panel|torso/i.test(userInstruction);
+  const mentionsCuffs = /cuff|wrist/i.test(userInstruction);
+  const mentionsLogo = /logo|brand|badge|emblem/i.test(userInstruction);
+  const mentionsNumber = /number|jersey num/i.test(userInstruction);
+  const mentionsStripes = /stripe|side panel|accent/i.test(userInstruction);
+
+  // Build explicit PRESERVE list — everything NOT mentioned
+  const preserveList = [];
+  if (!mentionsSleeves) preserveList.push('sleeves (keep their EXACT current color, pattern, and design)');
+  if (!mentionsCollar) preserveList.push('collar (keep its EXACT current color and style)');
+  if (!mentionsBody) preserveList.push('body/chest/front panel (keep its EXACT current color and design)');
+  if (!mentionsCuffs) preserveList.push('cuffs (keep their EXACT current color)');
+  if (!mentionsLogo) preserveList.push('all logos, badges, and emblems (keep them exactly as they are)');
+  if (!mentionsNumber) preserveList.push('any numbers or text on the garment (keep them exactly as they are)');
+  if (!mentionsStripes) preserveList.push('all stripes, accents, and side panels (keep their EXACT current colors)');
+
+  return `You are making a SURGICAL EDIT to this garment image.
+
+WHAT TO CHANGE:
+"${userInstruction}"
+
+WHAT TO ABSOLUTELY NOT CHANGE (preserve these EXACTLY as they appear in the image):
+${preserveList.map(p => `• ${p}`).join('\n')}
+
+CRITICAL RULES:
+1. ONLY modify the specific part(s) the user mentioned
+2. Every other part of the garment must be PIXEL-PERFECT identical to the input image
+3. The change must look naturally manufactured — as if the garment was made this way
+4. Same lighting, same shadows, same fabric texture on unchanged parts
+5. Same background (dark/black)
+6. Same garment shape and silhouette
+7. Do NOT reinterpret the overall design — only apply the one specific change
+
+Think of this as Photoshop — you are using a selection mask on ONLY the mentioned part and changing just that. Everything outside the selection stays untouched.
+
+Output: photorealistic garment on dark background, professional studio lighting.`;
+};
+```
+
+---
+
+## STEP 2 — PART DETECTION HELPER
+
+Add smarter parsing to detect exactly which part the user mentioned:
+
+```typescript
+interface EditAnalysis {
+  targetParts: string[];
+  changeType: 'color' | 'logo' | 'structure' | 'text' | 'pattern';
+  isSpecificPart: boolean;
+  preserveEverythingElse: boolean;
+}
+
+const analyzeEditInstruction = (instruction: string): EditAnalysis => {
+  const lower = instruction.toLowerCase();
+  
+  const partKeywords = {
+    'sleeves': ['sleeve', 'sleeves', 'arm', 'arms'],
+    'collar': ['collar', 'neck', 'neckline'],
+    'body': ['body', 'chest', 'front panel', 'back panel', 'torso', 'main panel'],
+    'cuffs': ['cuff', 'cuffs', 'wrist'],
+    'logo': ['logo', 'brand', 'badge', 'emblem', 'adidas', 'nike', 'puma'],
+    'number': ['number', 'jersey number', 'shirt number'],
+    'stripes': ['stripe', 'stripes', 'side panel', 'side stripe', 'accent'],
+    'shoulder': ['shoulder', 'shoulders'],
+    'hem': ['hem', 'bottom', 'waistband'],
+  };
+
+  const targetParts: string[] = [];
+  for (const [part, keywords] of Object.entries(partKeywords)) {
+    if (keywords.some(kw => lower.includes(kw))) {
+      targetParts.push(part);
+    }
+  }
+
+  const changeType = 
+    /color|colour|red|blue|green|black|white|gold|navy|purple|yellow|orange|pink|grey|gray/i.test(instruction) ? 'color' :
+    /logo|brand|badge|emblem/i.test(instruction) ? 'logo' :
+    /sleeve|sleeveless|collar|fit|length/i.test(instruction) ? 'structure' :
+    /number|text|name|font/i.test(instruction) ? 'text' :
+    /pattern|stripe|print|design/i.test(instruction) ? 'pattern' : 'color';
+
+  return {
+    targetParts,
+    changeType,
+    isSpecificPart: targetParts.length > 0,
+    preserveEverythingElse: true,
+  };
+};
+```
+
+---
+
+## STEP 3 — ENHANCED PROMPT BASED ON PART DETECTION
+
+Use the analysis to build an even more targeted prompt:
+
+```typescript
+const buildPreciseEditPrompt = (userInstruction: string) => {
+  const analysis = analyzeEditInstruction(userInstruction);
+  
+  // If a specific part is detected, be hyper-specific about it
+  if (analysis.isSpecificPart) {
+    const partDescriptions: Record<string, string> = {
+      'sleeves': 'ONLY the sleeve panels (the fabric covering the arms from shoulder seam to cuff). Do NOT touch the front body panel, back body panel, collar, or any other part.',
+      'collar': 'ONLY the collar/neckline area. Do NOT touch the body, sleeves, or any other part.',
+      'body': 'ONLY the main body panel (front/back chest area). Do NOT touch the sleeves, collar, or any other part.',
+      'cuffs': 'ONLY the cuff area at the end of the sleeves. Do NOT touch the sleeve body, main body, collar, or any other part.',
+      'logo': 'ONLY the logo/badge/emblem. Do NOT change any colors or other design elements.',
+      'stripes': 'ONLY the stripe/accent areas. Do NOT touch the main body color, sleeves, collar, or any other part.',
+      'shoulder': 'ONLY the shoulder yoke area. Do NOT touch the main body, sleeves, or any other part.',
+    };
+
+    const targetDescriptions = analysis.targetParts
+      .map(p => partDescriptions[p] || p)
+      .join('\n');
+
+    return `You are making a HIGHLY PRECISE surgical edit to this garment image.
+
+EDIT INSTRUCTION: "${userInstruction}"
+
+EXACT TARGET: 
+${targetDescriptions}
+
+STRICT PRESERVATION RULES:
+- The main body/front panel color must remain EXACTLY as it is in the input image
+- Every color that is NOT on the target part must remain EXACTLY the same
+- Every logo, badge, number, and text element must remain EXACTLY the same
+- The garment silhouette and shape must remain EXACTLY the same
+- The background must remain dark/black exactly as in the input
+- The lighting and shadows must remain consistent
+
+MENTAL MODEL: Imagine using Photoshop with a precise selection mask. You have selected ONLY ${analysis.targetParts.join(' and ')}. Everything outside this selection is completely locked and cannot change.
+
+Apply: ${userInstruction}
+Only to: ${analysis.targetParts.join(' and ')}
+Preserve: literally everything else
+
+Output: photorealistic garment, dark background, professional product photography.`;
+  }
+
+  // Fallback for non-specific instructions
+  return buildNaturalLanguageEditPrompt(userInstruction);
+};
+```
+
+---
+
+## STEP 4 — PRE-EDIT CONFIRMATION FOR AMBIGUOUS INSTRUCTIONS
+
+When the instruction is vague (no specific part detected), show a clarification UI instead of guessing:
+
+```typescript
+const handleNaturalLanguageEdit = async (editInstruction: string) => {
+  const analysis = analyzeEditInstruction(editInstruction);
+
+  // If no specific part detected and it's a color change
+  // ask user to clarify which part
+  if (!analysis.isSpecificPart && analysis.changeType === 'color') {
+    setShowPartClarification({
+      instruction: editInstruction,
+      message: `Which part should be changed to ${extractColor(editInstruction)}?`,
+    });
+    return;
+  }
+
+  // Otherwise proceed with edit
+  await applyEdit(editInstruction);
+};
+```
+
+Part clarification UI (appears below the input when triggered):
+
+```tsx
+{showPartClarification && (
+  <div style={{
+    background: '#1a1a1a',
+    border: '1px solid rgba(201,168,76,0.3)',
+    padding: '12px',
+    marginTop: '8px',
+  }}>
+    <div style={{ fontSize: '10px', color: '#C9A84C', marginBottom: '8px', letterSpacing: '1px' }}>
+      WHICH PART? — {showPartClarification.message}
+    </div>
+    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+      {['Sleeves', 'Body / Chest', 'Collar', 'Cuffs', 'Side Stripes', 'Full Garment'].map(part => (
+        <button
+          key={part}
+          onClick={() => {
+            const refined = `make the ${part.toLowerCase()} ${extractColor(showPartClarification.instruction)}`;
+            setShowPartClarification(null);
+            applyEdit(refined);
+          }}
+          style={{
+            background: 'transparent',
+            border: '1px solid rgba(167,139,250,0.4)',
+            color: '#a78bfa',
+            fontSize: '10px',
+            padding: '6px 12px',
+            cursor: 'pointer',
+            letterSpacing: '1px',
+          }}
+        >
+          {part}
+        </button>
+      ))}
+      <button
+        onClick={() => setShowPartClarification(null)}
+        style={{
+          background: 'transparent',
+          border: '1px solid rgba(255,100,100,0.3)',
+          color: '#ef4444',
+          fontSize: '10px',
+          padding: '6px 12px',
+          cursor: 'pointer',
+        }}
+      >
+        Cancel
+      </button>
+    </div>
+  </div>
+)}
+```
+
+Helper function:
+```typescript
+const extractColor = (instruction: string): string => {
+  const colors = ['red', 'blue', 'green', 'black', 'white', 'gold', 'navy', 'purple', 
+                  'yellow', 'orange', 'pink', 'grey', 'gray', 'teal', 'maroon', 'cyan'];
+  return colors.find(c => instruction.toLowerCase().includes(c)) || 'the new color';
+};
+```
+
+---
+
+## STEP 5 — UPDATE SUGGESTION CHIPS TO BE PART-SPECIFIC
+
+Replace vague chips with hyper-specific ones:
+
+```typescript
+const suggestions = [
+  'make the sleeves red',           // ← specific part + color
+  'make the collar gold',           // ← specific part + color
+  'make the body navy blue',        // ← specific part + color
+  'make the cuffs white',           // ← specific part + color
+  'remove all brand logos',         // ← specific action
+  'add number 10 on the back',      // ← specific placement
+  'change side stripes to gold',    // ← specific part
+  'make it sleeveless',             // ← structural
+  'add Pakistan flag on left sleeve', // ← specific placement
+  'change collar to polo collar',   // ← structural specific
+];
+```
+
+---
+
+## STEP 6 — SHOW WHAT WAS TARGETED IN SUCCESS TOAST
+
+After a successful edit, show exactly what was changed:
+
+```typescript
+// On success:
+const analysis = analyzeEditInstruction(editInstruction);
+const targetText = analysis.targetParts.length > 0 
+  ? `Changed: ${analysis.targetParts.join(' + ')}`
+  : 'Edit applied';
+
+toast.success(targetText, {
+  style: { 
+    background: '#1a1a1a', 
+    color: '#C9A84C', 
+    border: '1px solid rgba(201,168,76,0.3)',
+    fontSize: '11px',
+    letterSpacing: '1px',
+  }
+});
+```
+
+---
+
+## STEP 7 — INPUT PLACEHOLDER EXAMPLES
+
+Update the input placeholder to guide users toward specific part instructions:
+
+```tsx
+const placeholders = [
+  '"make the sleeves red"',
+  '"change the collar to gold"',
+  '"make the body navy blue"', 
+  '"add a star on the left chest"',
+  '"remove brand logos"',
+  '"change cuffs to white"',
+];
+
+// Rotate placeholder every 3 seconds
+const [placeholderIndex, setPlaceholderIndex] = useState(0);
+useEffect(() => {
+  const interval = setInterval(() => {
+    setPlaceholderIndex(i => (i + 1) % placeholders.length);
+  }, 3000);
+  return () => clearInterval(interval);
+}, []);
+```
+
+---
+
+## CHECKLIST
+- [ ] "make the sleeves red" only changes the sleeves — body stays same color
+- [ ] "make the collar gold" only changes the collar
+- [ ] "make the body navy blue" only changes the body/chest panel
+- [ ] Prompt explicitly lists all parts to PRESERVE
+- [ ] analyzeEditInstruction correctly detects mentioned parts
+- [ ] buildPreciseEditPrompt uses Photoshop selection mental model
+- [ ] Vague color instructions (no part specified) trigger clarification UI
+- [ ] Clarification UI shows part selector buttons
+- [ ] Selecting a part from clarification refines and applies the edit
+- [ ] Suggestion chips are all part-specific
+- [ ] Success toast shows which part was changed
+- [ ] Placeholder rotates through part-specific examples
+- [ ] No console errors
