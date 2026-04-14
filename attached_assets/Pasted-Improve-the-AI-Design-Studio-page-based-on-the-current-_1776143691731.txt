@@ -1,0 +1,75 @@
+Improve the AI Design Studio page based on the current state of the UI. Fix and enhance the following areas:
+
+---
+
+## 1. FIX — GEMINI API KEY BANNER
+
+Current: Yellow/gold banner at top saying "Enter your Gemini API key"
+Problems:
+- It takes up too much space and looks like an error
+- "USE POLLINATIONS" button is confusing for users
+- The banner is too prominent and distracting
+
+Fix:
+- Move the API key input OUT of the banner and INTO the right panel
+- Place it as a collapsible section at the very bottom of the right panel
+- Style it as a small subtle card:
+  background: #0f0f0f
+  border: 1px solid rgba(201,168,76,0.2)
+  padding: 12px
+  Label: "⚙ AI Configuration" (collapsed by default, expand on click)
+  Inside: API key input + Save button
+- When key is saved: show a small green "✓ Gemini Connected" badge in the navbar (next to TrustPass badge)
+- When key is NOT saved: show a small amber "⚠ API Key Required" badge in navbar
+- Remove the full-width banner from the top of the studio completely
+
+---
+
+## 2. FIX — EMPTY CANVAS STATE
+
+Current: Grey t-shirt silhouette with a lightning bolt icon and tiny text
+Problems:
+- Looks unfinished and generic
+- User doesn't know what to do
+
+Fix:
+Replace with a much more engaging empty state:
+- Dark canvas background #0a0a0a
+- Animated purple pulsing border (keyframe: border-color alternates rgba(167,139,250,0.2) to rgba(167,139,250,0.6), 2s infinite)
+- Center content:
+  - Large ⚡ icon in gold (40px)
+  - Heading (Bebas Neue 24px): "YOUR DESIGN APPEARS HERE"
+  - Subtext (11px, #555): "Type a prompt and click Generate, or upload your logo"
+  - Three quick-start prompt chips below:
+    ["🏏 Pakistan Cricket Kit"] ["🦅 Eagle Streetwear"] ["🏆 Championship Jersey"]
+    - Clicking a chip fills the prompt textarea and auto-clicks Generate
+  - Small divider then: "Or switch to UPLOAD tab to place your own logo"
+
+---
+
+## 3. FIX — ERROR MESSAGE DISPLAY
+
+Current: Red error box at bottom of right panel: "No Gemini API key provided"
+Problems:
+- Shown too prominently, looks broken
+- Should guide user instead of just showing error
+
+Fix:
+- Remove the red error box completely
+- Instead, when user clicks "GENERATE DESIGN" without an API key:
+  - Shake animation on the Generate button (CSS keyframe, 0.5s)
+  - Toast notification slides in from top-right:
+    Background #1a1a1a, border 1px solid #C9A84C
+    Icon: ⚠
+    Text: "API key required — expand ⚙ AI Configuration below to add your Gemini key"
+    Auto-dismisses after 4 seconds
+  - Smooth scroll to the API configuration section at bottom of right panel
+  - API config section auto-expands
+
+---
+
+## 4. IMPROVE — RIGHT PANEL LAYOUT
+
+Current: Cramped, elements too close together, generate button too large relative to other elements
+
+Fix the right panel spacing and hierarchy:

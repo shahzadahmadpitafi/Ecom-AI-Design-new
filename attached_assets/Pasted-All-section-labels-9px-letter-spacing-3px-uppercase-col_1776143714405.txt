@@ -1,0 +1,93 @@
+All section labels: 9px, letter-spacing 3px, uppercase, color #a78bfa
+All section dividers: 1px solid rgba(167,139,250,0.15)
+Padding between sections: 16px
+
+---
+
+## 5. IMPROVE — GENERATE BUTTON
+
+Current: Large gold button, works fine but could be better
+
+Improvements:
+- Add ⚡ icon left of text
+- Text: "GENERATE DESIGN" in Bebas Neue 16px
+- When API key IS connected: gold shimmer button (current)
+- When API key NOT connected: 
+  - Button still gold but shows lock icon: "🔒 GENERATE DESIGN"
+  - On click: shake animation + toast (as described above)
+- When generating: button becomes disabled, shows spinner + "GENERATING..." text
+  - Spinner: small spinning ring in black (on gold button)
+  - Progress: subtle left-to-right fill animation on button background
+
+---
+
+## 6. IMPROVE — VIEW TOGGLE BUTTONS (Front/Back/Sleeve)
+
+Current: Plain dark buttons, not visually engaging
+
+Fix:
+- Active view: gold background, black text, gold glow: box-shadow 0 0 12px rgba(201,168,76,0.3)
+- Inactive: dark background, purple border, #a0a0a0 text
+- Hover: purple border brightens, text goes white
+- When switching view during 'generated' mode:
+  - Show small loading spinner inside the active button while regenerating
+  - Button text becomes "..." during generation
+  - Other buttons disabled during generation
+
+---
+
+## 7. IMPROVE — SESSION HISTORY STRIP
+
+Current: Small thumbnails at bottom, hard to see
+
+Fix:
+- Increase thumbnail size to 72x72px
+- Add purple border on hover, gold border on active (currently shown)
+- On hover: show tooltip with truncated prompt text + timestamp
+- Label above: "SESSION HISTORY (X)" — X updates as designs are added
+- Add a "Clear History" X button at the right end of the strip
+- If no history: hide the strip completely (don't show empty row)
+- Smooth horizontal scroll if more than 4 thumbnails
+
+---
+
+## 8. IMPROVE — LEFT PANEL (Product Selector)
+
+Current: "Choose product..." dropdown is generic and boring
+
+Fix:
+- Replace dropdown with a two-level selector:
+  
+  Level 1 — Category pills (scrollable horizontal row):
+  [Streetwear] [Fitness] [Sports] [Boxing] [Motocross] [Caps]
+  Active: gold pill
+  
+  Level 2 — Product grid (shows after category selected):
+  2-column grid of product cards
+  Each card: dark bg, product name (10px uppercase), price (gold)
+  Selected: gold border + checkmark
+  
+- When product is selected: its name feeds into the Gemini prompt automatically
+  e.g. selectedProduct = "Oversized Hoodie" → prompt suffix: "on a Black Oversized Hoodie"
+
+---
+
+## 9. IMPROVE — MOBILE STUDIO LAYOUT
+
+Current: Panels likely don't stack correctly on mobile
+
+Fix for screens under 768px:
+- Hide left panel behind a slide-out drawer
+  - Trigger: "⚙ Product Options" button at top of screen (gold, full width)
+  - Drawer slides in from left, overlay closes it
+- Canvas: full width, 350px height minimum
+- Right panel: full width below canvas
+- Generate button: always visible, sticky at bottom of right panel on mobile
+- Tab bar (AI/Upload/Text): full width, equal columns
+- Quick-start chips: 2 per row on mobile
+
+---
+
+## 10. ADD — PRODUCT INFO CARD
+
+When a product is selected from the left panel, show a small info card below the canvas:

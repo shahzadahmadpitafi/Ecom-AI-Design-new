@@ -15,6 +15,7 @@ export function Navbar() {
   const [location] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [geminiConnected, setGeminiConnected] = useState(false);
   const { currency, toggle } = useCurrency();
 
   useEffect(() => {
@@ -22,6 +23,19 @@ export function Navbar() {
     window.addEventListener("scroll", fn, { passive: true });
     return () => window.removeEventListener("scroll", fn);
   }, []);
+
+  // Track Gemini key in localStorage
+  useEffect(() => {
+    const check = () => setGeminiConnected(!!localStorage.getItem("gemini_api_key"));
+    check();
+    window.addEventListener("storage", check);
+    return () => window.removeEventListener("storage", check);
+  }, []);
+
+  // Re-check when navigating to studio
+  useEffect(() => {
+    setGeminiConnected(!!localStorage.getItem("gemini_api_key"));
+  }, [location]);
 
   // Close on location change
   useEffect(() => { setIsOpen(false); }, [location]);
@@ -103,6 +117,20 @@ export function Navbar() {
             >
               ALI <span className="font-normal text-[10px] text-[#a0a0a0] ml-0.5">TrustPass</span>
             </a>
+
+            {/* Gemini AI status badge — only on Studio page */}
+            {location === "/studio" && (
+              <div
+                className="hidden md:flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider transition-all"
+                style={{
+                  border: `1px solid ${geminiConnected ? "rgba(34,197,94,0.4)" : "rgba(201,168,76,0.35)"}`,
+                  background: geminiConnected ? "rgba(34,197,94,0.06)" : "rgba(201,168,76,0.06)",
+                  color: geminiConnected ? "#22c55e" : "#C9A84C",
+                }}
+              >
+                {geminiConnected ? "✓ AI" : "⚠ AI"}
+              </div>
+            )}
 
             {/* PKR / USD toggle */}
             <button
