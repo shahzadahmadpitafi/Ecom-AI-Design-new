@@ -301,22 +301,20 @@ export default function Studio() {
           }),
         });
 
-        if (res.ok) {
-          const data = await res.json();
-          if (data.imageUrl) {
-            setGeneratedImageUrl(data.imageUrl);
-            addToHistory(finalPrompt, data.imageUrl);
-            toast({ title: "Design generated!", description: "Drag to reposition on the canvas." });
-            return;
-          }
+        const resData = await res.json().catch(() => ({}));
+
+        if (res.ok && resData.imageUrl) {
+          setGeneratedImageUrl(resData.imageUrl);
+          addToHistory(finalPrompt, resData.imageUrl);
+          toast({ title: "Design generated!", description: "Your garment visualization is ready." });
+          return;
         }
 
-        const errData = await res.json().catch(() => ({}));
-        if (errData.code === "NO_API_KEY" || errData.code === "INVALID_KEY") {
+        if (resData.code === "NO_API_KEY" || resData.code === "INVALID_KEY") {
           setShowKeyInput(true);
-          throw new Error(errData.error || "API key required");
+          throw new Error(resData.error || "API key required");
         }
-        // Fall through to Pollinations
+        // Fall through to Pollinations on any other error
       }
 
       // Pollinations.ai fallback
@@ -340,7 +338,7 @@ export default function Studio() {
 
       setGeneratedImageUrl(url);
       addToHistory(finalPrompt, url);
-      toast({ title: "Design ready!", description: "Drag to reposition on the canvas." });
+      toast({ title: "Design ready!", description: "Your garment visualization is ready." });
     } catch (err: any) {
       const msg = err.message || "Generation failed";
       setGenerationError(msg);
@@ -423,12 +421,14 @@ export default function Studio() {
       size: selectedSize,
       fabric: selectedFabric,
       gsm: selectedGsm,
-      designImageUrl: activeDesignImage,
+      designImageUrl: generatedImageUrl || uploadedImage,
     }));
     setLocation("/quote");
   };
 
-  const activeDesignImage = generatedImageUrl || uploadedImage;
+  // Generated images fill the canvas; uploaded logos overlay the garment silhouette
+  const hasGeneratedImage = !!generatedImageUrl;
+  const hasUploadedLogo   = !!uploadedImage;
   const currentPos = getPos(activeAngle);
 
   // ── Input style helpers ──────────────────────────────────────────────────────
@@ -464,7 +464,7 @@ export default function Studio() {
           <button
             className="flex items-center gap-1.5 h-8 px-3 text-[11px] font-bold uppercase tracking-wider transition-all disabled:opacity-40"
             onClick={handleAddToQuote}
-            disabled={!activeDesignImage}
+            disabled={!generatedImageUrl && !uploadedImage}
             style={{ background: "#C9A84C", color: "#0a0a0a" }}
             data-testid="button-add-to-quote"
           >
@@ -644,13 +644,29 @@ export default function Studio() {
               background: "#111",
             }}
           >
-            <div className="absolute inset-0">
-              <GarmentSVG angle={activeAngle} color={garmentColor.value} />
-            </div>
 
-            {activeDesignImage && (
+            {/* ── CASE 1: AI-Generated image — fills the entire canvas ── */}
+            {hasGeneratedImage && !isGenerating && (
+              <img
+                src={generatedImageUrl!}
+                alt="AI-generated garment"
+                className="absolute inset-0 w-full h-full"
+                style={{ objectFit: "contain", background: "#111" }}
+                data-testid="generated-fullscreen-image"
+              />
+            )}
+
+            {/* ── CASE 2: No generated image — show garment silhouette ── */}
+            {!hasGeneratedImage && (
+              <div className="absolute inset-0">
+                <GarmentSVG angle={activeAngle} color={garmentColor.value} />
+              </div>
+            )}
+
+            {/* ── Upload logo overlay (only on garment silhouette, not on AI image) ── */}
+            {hasUploadedLogo && !hasGeneratedImage && (
               <DraggableDesign
-                imageUrl={activeDesignImage}
+                imageUrl={uploadedImage!}
                 canvasRef={canvasRef}
                 pos={currentPos}
                 onPosChange={p => setPos(activeAngle, p)}
@@ -658,7 +674,8 @@ export default function Studio() {
               />
             )}
 
-            {customText && (
+            {/* ── Custom text overlay (only on garment silhouette) ── */}
+            {customText && !hasGeneratedImage && (
               <div className="absolute pointer-events-none flex items-end justify-center z-20"
                 style={{ bottom: "18%", left: "10%", right: "10%", textAlign: "center" }}>
                 <span className="font-display text-2xl tracking-widest" style={{ color: textColor, textShadow: "0 2px 8px rgba(0,0,0,0.6)" }}>
@@ -667,7 +684,7 @@ export default function Studio() {
               </div>
             )}
 
-            {/* Generating state */}
+            {/* ── Generating overlay ── */}
             {isGenerating && (
               <div className="absolute inset-0 flex flex-col items-center justify-center z-30 overflow-hidden"
                 style={{ background: "rgba(0,0,0,0.85)", backdropFilter: "blur(4px)" }}>
@@ -679,33 +696,32 @@ export default function Studio() {
               </div>
             )}
 
-            {/* Empty state */}
-            {!activeDesignImage && !isGenerating && !customText && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none"
-                style={{ border: "1px dashed rgba(167,139,250,0.15)" }}>
+            {/* ── Empty state (no image, no upload, no text) ── */}
+            {!hasGeneratedImage && !hasUploadedLogo && !isGenerating && !customText && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
                 <div className="text-center px-4">
                   <div className="w-12 h-12 mx-auto mb-3 flex items-center justify-center"
                     style={{ background: "rgba(167,139,250,0.08)", border: "1px solid rgba(167,139,250,0.2)" }}>
                     <Zap className="h-5 w-5" style={{ color: "#a78bfa" }} />
                   </div>
                   <p className="text-[10px] uppercase tracking-widest text-[#555]">
-                    Generate a design or upload your logo to see it on your garment
+                    Generate a design or upload your logo
                   </p>
                 </div>
               </div>
             )}
 
-            {/* Hint text when design applied */}
-            {activeDesignImage && !isAccepted && !isGenerating && (
+            {/* ── Upload drag hint (shown for upload/text overlay, not for AI image) ── */}
+            {hasUploadedLogo && !hasGeneratedImage && !isAccepted && !isGenerating && (
               <div className="absolute bottom-2 left-0 right-0 flex justify-center pointer-events-none z-20">
                 <span className="px-2 py-0.5 text-[9px] uppercase tracking-widest" style={{ background: "rgba(0,0,0,0.8)", color: "#C9A84C" }}>
-                  Drag to reposition · Scroll to resize · Switch views above
+                  Drag to reposition · Scroll to resize
                 </span>
               </div>
             )}
 
-            {/* Accepted badge */}
-            {isAccepted && (
+            {/* ── Locked badge (upload mode only) ── */}
+            {isAccepted && hasUploadedLogo && !hasGeneratedImage && (
               <div className="absolute top-2 right-2 z-20 flex items-center gap-1 px-2 py-0.5"
                 style={{ background: "rgba(201,168,76,0.9)" }}>
                 <CheckCircle className="h-3 w-3 text-black" />
@@ -713,7 +729,7 @@ export default function Studio() {
               </div>
             )}
 
-            {/* Angle badge */}
+            {/* ── Angle badge ── */}
             <div className="absolute top-2 left-2 z-20">
               <span className="text-[9px] uppercase tracking-widest px-1.5 py-0.5"
                 style={{ background: "rgba(0,0,0,0.7)", color: "rgba(167,139,250,0.8)" }}>
@@ -724,15 +740,16 @@ export default function Studio() {
 
           {/* Controls below canvas */}
           <div className="flex items-center gap-2 mt-3 flex-wrap justify-center">
-            {activeDesignImage && !isAccepted && (
+            {/* Accept/Unlock only relevant for upload overlay — not needed for full AI image */}
+            {hasUploadedLogo && !hasGeneratedImage && !isAccepted && (
               <button onClick={() => setIsAccepted(true)}
                 className="h-8 px-4 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5"
                 style={{ background: "#C9A84C", color: "#0a0a0a" }}
                 data-testid="button-accept-design">
-                <CheckCircle className="h-3.5 w-3.5" /> Accept Design
+                <CheckCircle className="h-3.5 w-3.5" /> Lock Position
               </button>
             )}
-            {isAccepted && (
+            {hasUploadedLogo && !hasGeneratedImage && isAccepted && (
               <button onClick={() => setIsAccepted(false)}
                 className="h-8 px-4 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors"
                 style={{ border: "1px solid rgba(167,139,250,0.3)", color: "#a78bfa" }}>
@@ -740,9 +757,9 @@ export default function Studio() {
               </button>
             )}
             {[
-              { icon: ZoomOut, action: () => setZoom(z => Math.max(0.4, +(z - 0.1).toFixed(1))), testId: "button-zoom-out" },
-              { icon: ZoomIn,  action: () => setZoom(z => Math.min(2,   +(z + 0.1).toFixed(1))), testId: "button-zoom-in"  },
-              { icon: RotateCcw, action: () => setZoom(1),                                        testId: "button-reset-zoom" },
+              { icon: ZoomOut,   action: () => setZoom(z => Math.max(0.4, +(z - 0.1).toFixed(1))), testId: "button-zoom-out"   },
+              { icon: ZoomIn,    action: () => setZoom(z => Math.min(2,   +(z + 0.1).toFixed(1))), testId: "button-zoom-in"    },
+              { icon: RotateCcw, action: () => setZoom(1),                                          testId: "button-reset-zoom" },
             ].map(({ icon: Icon, action, testId }) => (
               <button key={testId} onClick={action}
                 className="p-1.5 transition-colors text-[#555] hover:text-[#C9A84C]"
