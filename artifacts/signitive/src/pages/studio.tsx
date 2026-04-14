@@ -57,6 +57,13 @@ const GENERATING_MESSAGES = [
   "Finalizing your creation...",
 ];
 
+const VIEW_SWITCH_MESSAGES: Record<string, string[]> = {
+  Front:        ["Returning to front view...", "Rendering front panel..."],
+  Back:         ["Rotating garment...", "Rendering back view...", "Generating back panel..."],
+  "Left Sleeve":  ["Focusing on left sleeve...", "Rendering sleeve detail...", "Generating sleeve view..."],
+  "Right Sleeve": ["Focusing on right sleeve...", "Rendering sleeve detail...", "Generating sleeve view..."],
+};
+
 const GARMENT_TYPE_MAP: Record<string, string> = {
   "Streetwear":      "t-shirt",
   "Fitness Wear":    "athletic t-shirt",
@@ -526,6 +533,14 @@ export default function Studio() {
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const [refinePrompt, setRefinePrompt]       = useState("");
 
+  // ── View switching ──
+  const [currentView, setCurrentView]         = useState<string>("Front");
+  const [viewCache, setViewCache]             = useState<Record<string, string>>({});
+  const [isViewSwitching, setIsViewSwitching] = useState(false);
+  const [viewSwitchMsgIdx, setViewSwitchMsgIdx] = useState(0);
+  const [currentPrompt, setCurrentPrompt]     = useState("");
+  const [currentStyleModifiers, setCurrentStyleModifiers] = useState<string[]>([]);
+
   // ── Upload ──
   const [uploadedImage, setUploadedImage]     = useState<string | null>(null);
   const [isAccepted, setIsAccepted]           = useState(false);
@@ -581,6 +596,12 @@ export default function Studio() {
     const t = setInterval(() => setEditMsgIdx(i => (i+1) % editMsgSet.length), 2000);
     return () => clearInterval(t);
   }, [isEditing, editMsgSet]);
+  useEffect(() => {
+    if (!isViewSwitching) { setViewSwitchMsgIdx(0); return; }
+    const msgs = VIEW_SWITCH_MESSAGES[currentView] || ["Loading view..."];
+    const t = setInterval(() => setViewSwitchMsgIdx(i => (i+1) % msgs.length), 2000);
+    return () => clearInterval(t);
+  }, [isViewSwitching, currentView]);
 
   // ── Derived ──
   const getPos   = (angle: string): DesignPos => positions[angle] ?? { ...PRINT_ZONES[angle] };
@@ -638,6 +659,75 @@ export default function Studio() {
     return "";
   };
 
+  // ── View-switch generate (Gemini or Pollinations, for non-front views) ──
+  const generateViewWithPollinations = async (viewPrompt: string, view: string): Promise<string> => {
+    const styleParts = STYLE_TAGS.filter(t => currentStyleModifiers.includes(t.label)).map(t => t.prompt).join(", ");
+    const full = [viewPrompt, styleParts, `${view} view`, "apparel graphic design, professional product mockup, dark background, high quality"].filter(Boolean).join(", ");
+    const seed = Math.floor(Math.random() * 99999);
+    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(full)}?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("Failed to load image"));
+      img.src = url;
+      setTimeout(() => reject(new Error("Timeout")), 45000);
+    });
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth || 1024;
+      canvas.height = img.naturalHeight || 1024;
+      canvas.getContext("2d")!.drawImage(img, 0, 0);
+      return canvas.toDataURL("image/jpeg", 0.92);
+    } catch {
+      return url;
+    }
+  };
+
+  // ── Handle view tab click ──
+  const handleViewChange = async (newView: string) => {
+    if (newView === currentView) return;
+    setActiveAngle(newView);
+    setCurrentView(newView);
+
+    if (!generatedImageUrl) return;
+
+    if (viewCache[newView]) {
+      setGeneratedImageUrl(viewCache[newView]);
+      return;
+    }
+
+    const prevImageUrl = generatedImageUrl;
+    setIsViewSwitching(true);
+    const viewKey = newView.toLowerCase();
+
+    try {
+      if (geminiKey) {
+        const res = await fetch("/api/generate-design", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-gemini-key": geminiKey },
+          body: JSON.stringify({ prompt: currentPrompt, styleModifiers: currentStyleModifiers, garmentType, garmentColor: garmentColor.label, view: viewKey }),
+        });
+        const resData = await res.json().catch(() => ({}));
+        if (res.ok && resData.imageUrl) {
+          setViewCache(prev => ({ ...prev, [newView]: resData.imageUrl }));
+          setGeneratedImageUrl(resData.imageUrl);
+          return;
+        }
+      }
+      const imgUrl = await generateViewWithPollinations(currentPrompt, viewKey);
+      setViewCache(prev => ({ ...prev, [newView]: imgUrl }));
+      setGeneratedImageUrl(imgUrl);
+    } catch {
+      setCurrentView(currentView);
+      setActiveAngle(currentView);
+      setGeneratedImageUrl(prevImageUrl);
+      toast({ title: "Could not load this view", description: "Please try again.", variant: "destructive" });
+    } finally {
+      setIsViewSwitching(false);
+    }
+  };
+
   // ── Pollinations (client-side, with canvas→base64 conversion for editing) ──
   const generateWithPollinations = async (promptWithProduct: string, finalPrompt: string) => {
     const styleParts = STYLE_TAGS.filter(t => selectedStyles.includes(t.label)).map(t => t.prompt).join(", ");
@@ -668,6 +758,7 @@ export default function Studio() {
     setGeneratedImageUrl(imageDataUrl);
     addToHistory(finalPrompt, imageDataUrl, "Generated");
     setUndoStack([]);
+    setViewCache({ Front: imageDataUrl });
     toast({ title: "Design ready!", description: "Generated with Pollinations AI. Add a Gemini key for AI editing." });
   };
 
@@ -675,17 +766,42 @@ export default function Studio() {
   const doGenerate = async (finalPrompt: string, _fallback = false) => {
     setIsGenerating(true);
     setGeneratedImageUrl(null);
+    setViewCache({});
+    setCurrentView("Front");
+    setActiveAngle("Front");
     resetPos();
+
+    const savedPrompt = finalPrompt;
+    const savedStyles = [...selectedStyles];
+    setCurrentPrompt(savedPrompt);
+    setCurrentStyleModifiers(savedStyles);
 
     const productSuffix = selectedProductData ? ` on a ${garmentColor.label} ${selectedProductData.name}` : "";
     const promptWithProduct = finalPrompt + productSuffix;
+
+    const cacheAndPrefetch = (imageUrl: string) => {
+      setViewCache({ Front: imageUrl });
+      if (geminiKey) {
+        setTimeout(async () => {
+          try {
+            const res = await fetch("/api/generate-design", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "x-gemini-key": geminiKey },
+              body: JSON.stringify({ prompt: promptWithProduct, styleModifiers: savedStyles, garmentType, garmentColor: garmentColor.label, view: "back" }),
+            });
+            const d = await res.json().catch(() => ({}));
+            if (res.ok && d.imageUrl) setViewCache(prev => ({ ...prev, Back: d.imageUrl }));
+          } catch { /* silent */ }
+        }, 2000);
+      }
+    };
 
     try {
       if (geminiKey) {
         const res = await fetch("/api/generate-design", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-gemini-key": geminiKey },
-          body: JSON.stringify({ prompt: promptWithProduct, styleModifiers: selectedStyles, garmentType, garmentColor: garmentColor.label, view: activeAngle.toLowerCase() }),
+          body: JSON.stringify({ prompt: promptWithProduct, styleModifiers: savedStyles, garmentType, garmentColor: garmentColor.label, view: "front" }),
         });
         const resData = await res.json().catch(() => ({}));
 
@@ -693,6 +809,7 @@ export default function Studio() {
           setGeneratedImageUrl(resData.imageUrl);
           addToHistory(finalPrompt, resData.imageUrl, "Generated");
           setUndoStack([]);
+          cacheAndPrefetch(resData.imageUrl);
           toast({ title: "Design generated!", description: "Your garment visualization is ready." });
           return;
         }
@@ -764,6 +881,7 @@ export default function Studio() {
       if (data.imageUrl) {
         setGeneratedImageUrl(data.imageUrl);
         addToHistory(editPrompt, data.imageUrl, "Edited");
+        setViewCache(prev => ({ [currentView]: data.imageUrl, ...(prev[currentView] ? {} : {}) }));
         setPendingColorEdits([]); setSelectedPart(null); setSelectedColor(null);
         setRemoveBrand(false); setLogoUploadBase64(null);
         setSelectedSleeve(null); setSelectedCollar(null); setSelectedFit(null); setSelectedLength(null);
@@ -908,17 +1026,34 @@ export default function Studio() {
           {/* Angle tabs */}
           <div className="flex gap-1 mb-4 w-full justify-center flex-wrap">
             {ANGLES.map(angle => {
-              const isActive = activeAngle === angle;
+              const isActive = currentView === angle;
+              const isCached = !!viewCache[angle];
+              const isThisLoading = isViewSwitching && currentView === angle;
               return (
-                <button key={angle} onClick={() => setActiveAngle(angle)}
-                  className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest border transition-all"
+                <button key={angle}
+                  onClick={() => handleViewChange(angle)}
+                  disabled={isViewSwitching}
+                  className="relative px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest border transition-all"
                   style={{
-                    borderColor: isActive ? "#C9A84C" : "rgba(167,139,250,0.2)",
+                    borderColor: isActive ? "#C9A84C" : isCached ? "rgba(201,168,76,0.4)" : "rgba(167,139,250,0.2)",
                     backgroundColor: isActive ? "#C9A84C" : "transparent",
-                    color: isActive ? "#0a0a0a" : "#888",
+                    color: isActive ? "#0a0a0a" : isCached ? "#C9A84C" : "#888",
                     boxShadow: isActive ? "0 0 12px rgba(201,168,76,0.3)" : "none",
+                    opacity: isViewSwitching && !isActive ? 0.5 : 1,
+                    cursor: isViewSwitching ? "wait" : "pointer",
                   }}>
-                  {angle}
+                  {isThisLoading ? (
+                    <span className="flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" /> ...
+                    </span>
+                  ) : (
+                    <>
+                      {angle}
+                      {isCached && !isActive && (
+                        <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full" style={{ background: "#C9A84C" }} />
+                      )}
+                    </>
+                  )}
                 </button>
               );
             })}
@@ -960,6 +1095,26 @@ export default function Studio() {
                 <span className="font-display text-2xl tracking-widest" style={{ color: textColor, textShadow: "0 2px 8px rgba(0,0,0,0.6)" }}>
                   {customText}
                 </span>
+              </div>
+            )}
+
+            {/* View-switching overlay (ghost of previous image) */}
+            {isViewSwitching && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center z-30">
+                {generatedImageUrl && (
+                  <img src={generatedImageUrl} alt="" className="absolute inset-0 w-full h-full"
+                    style={{ objectFit: "contain", opacity: 0.3 }} />
+                )}
+                <div className="absolute inset-0" style={{ background: "rgba(10,10,10,0.65)" }} />
+                <div className="relative z-10 flex flex-col items-center gap-3">
+                  <div className="w-6 h-6 border-2 border-[#C9A84C] border-t-transparent rounded-full animate-spin" />
+                  <p className="font-display text-sm tracking-widest uppercase" style={{ color: "#C9A84C" }}>
+                    {(VIEW_SWITCH_MESSAGES[currentView] || ["Loading..."])[viewSwitchMsgIdx % (VIEW_SWITCH_MESSAGES[currentView]?.length || 1)]}
+                  </p>
+                </div>
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden">
+                  <div className="h-full w-1/2 animate-gen-progress" style={{ background: "linear-gradient(90deg, transparent, #C9A84C, transparent)" }} />
+                </div>
               </div>
             )}
 
@@ -1028,10 +1183,10 @@ export default function Studio() {
               </div>
             )}
 
-            {/* Angle badge */}
+            {/* View badge */}
             <div className="absolute top-2 left-2 z-20">
               <span className="text-[9px] uppercase tracking-widest px-1.5 py-0.5" style={{ background: "rgba(0,0,0,0.7)", color: "rgba(167,139,250,0.8)" }}>
-                {activeAngle}
+                {currentView}
               </span>
             </div>
           </div>

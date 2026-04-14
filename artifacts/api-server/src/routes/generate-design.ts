@@ -31,13 +31,21 @@ router.post("/generate-design", async (req, res) => {
       .map((m: string) => STYLE_DESCRIPTIONS[m] || m)
       .join(", ");
 
-    const fullPrompt = `Photorealistic product mockup of a ${garmentColor} ${garmentType}, ${view} view.
+    const VIEW_PROMPTS: Record<string, string> = {
+      front: "Front view of the garment facing directly toward the camera. Full front panel visible. Ghost mannequin style.",
+      back: "Back view of the garment turned completely around showing the back panel. Same garment, viewed from behind. Any back number or logo fully visible. Ghost mannequin style.",
+      "left sleeve": "Left sleeve close-up of the garment. The left arm and shoulder area is the focus. Show the sleeve design, cuff, and shoulder clearly. Same garment colors and style.",
+      "right sleeve": "Right sleeve close-up of the garment. The right arm and shoulder area is the focus. Show the sleeve design, cuff, and shoulder clearly. Same garment colors and style.",
+    };
+    const viewDesc = VIEW_PROMPTS[view?.toLowerCase()] || VIEW_PROMPTS.front;
+
+    const fullPrompt = `Photorealistic product mockup. ${viewDesc}
+Garment: ${garmentColor} ${garmentType}.
 Custom printed graphic design: ${prompt}.
 Design style: ${styles || "modern streetwear graphic"}.
-The design is printed directly on the garment fabric.
-Shot style: ghost mannequin or flat lay, professional studio lighting, pure dark background.
-The garment looks premium and ready for sale. High resolution, sharp details, realistic fabric texture visible.
-No extra text, no watermarks, no background clutter.`;
+The design is printed directly on the garment fabric. Consistent colors, patterns, and aesthetic across all views.
+Professional studio lighting. Pure dark background (#0a0a0a).
+High resolution. Realistic fabric texture. No watermarks. No extra text.`;
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${apiKey}`,
