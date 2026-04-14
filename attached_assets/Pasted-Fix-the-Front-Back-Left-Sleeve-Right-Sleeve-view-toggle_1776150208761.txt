@@ -1,0 +1,367 @@
+Fix the Front/Back/Left Sleeve/Right Sleeve view toggle buttons in the AI Design Studio. Currently clicking them does nothing or doesn't change the canvas view. This needs to work properly.
+
+---
+
+## THE EXACT BEHAVIOR REQUIRED
+
+When a design is generated and showing on canvas:
+- User clicks "BACK" → Gemini regenerates the SAME garment from the BACK view → canvas updates
+- User clicks "LEFT SLEEVE" → Gemini regenerates showing the LEFT SLEEVE view → canvas updates
+- User clicks "RIGHT SLEEVE" → Gemini regenerates showing the RIGHT SLEEVE view → canvas updates
+- User clicks "FRONT" → returns to front view (either regenerates or restores cached front image)
+
+Each view should look like a professional product photo from that specific angle.
+
+---
+
+## STEP 1 — STATE MANAGEMENT
+
+Add this state to the studio component:
+
+```typescript
+const [currentView, setCurrentView] = useState<'front' | 'back' | 'left sleeve' | 'right sleeve'>('front');
+const [viewCache, setViewCache] = useState<Record<string, string>>({});
+// viewCache stores previously generated images per view so we don't regenerate unnecessarily
+// e.g. { 'front': 'data:image/...', 'back': 'data:image/...' }
+
+const [isViewSwitching, setIsViewSwitching] = useState(false);
+```
+
+---
+
+## STEP 2 — VIEW SWITCH HANDLER
+
+```typescript
+const handleViewChange = async (newView: 'front' | 'back' | 'left sleeve' | 'right sleeve') => {
+  // Don't do anything if already on this view
+  if (newView === currentView) return;
+  
+  // Don't switch if no design has been generated yet
+  if (canvasMode === 'empty') {
+    setCurrentView(newView);
+    return;
+  }
+
+  // Check cache first — if we already generated this view, restore it instantly
+  if (viewCache[newView]) {
+    setCurrentView(newView);
+    setGeneratedImageUrl(viewCache[newView]);
+    return; // no API call needed
+  }
+
+  // Need to generate this view
+  setCurrentView(newView);
+  setIsViewSwitching(true);
+  setCanvasMode('generating');
+
+  try {
+    const response = await fetch('/api/generate-design', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-gemini-key': localStorage.getItem('gemini_api_key') || '',
+      },
+      body: JSON.stringify({
+        prompt: currentPrompt, // the original prompt used to generate
+        styleModifiers: currentStyleModifiers,
+        garmentType: selectedProduct || 'T-Shirt',
+        garmentColor: selectedColor || 'Black',
+        view: newView, // ← pass the new view
+      }),
+    });
+
+    const data = await response.json();
+
+    if (data.imageUrl) {
+      // Cache this view
+      setViewCache(prev => ({ ...prev, [newView]: data.imageUrl }));
+      setGeneratedImageUrl(data.imageUrl);
+      setCanvasMode('generated');
+    }
+  } catch (error) {
+    // On error, revert to previous view
+    setCurrentView(currentView);
+    setCanvasMode('generated');
+    toast.error('Could not load this view — please try again');
+  } finally {
+    setIsViewSwitching(false);
+  }
+};
+```
+
+---
+
+## STEP 3 — CACHE THE FRONT VIEW ON GENERATION
+
+When the initial design is generated (front view), immediately cache it:
+
+```typescript
+const handleGenerate = async () => {
+  setCanvasMode('generating');
+  setCurrentView('front'); // always starts at front
+  setViewCache({}); // clear cache for new generation
+  
+  // ... existing generation code ...
+
+  if (data.imageUrl) {
+    setGeneratedImageUrl(data.imageUrl);
+    setViewCache({ front: data.imageUrl }); // cache front immediately
+    setCanvasMode('generated');
+    
+    // Add to session history
+    setDesignHistory(prev => [{
+      imageUrl: data.imageUrl,
+      prompt,
+      timestamp: new Date(),
+    }, ...prev].slice(0, 10));
+  }
+};
+```
+
+---
+
+## STEP 4 — GEMINI PROMPT PER VIEW
+
+In /lib/gemini.ts, update the prompt to be very specific about the view angle:
+
+```typescript
+const viewPrompts: Record<string, string> = {
+  'front': `Front view of the garment. The garment faces directly toward the camera. 
+    Full front panel visible. Ghost mannequin or flat lay style.`,
+    
+  'back': `Back view of the garment. The garment is turned completely around showing the back panel. 
+    Back design/number/logo fully visible. Ghost mannequin or flat lay style.
+    Same garment as the front but viewed from behind.`,
+    
+  'left sleeve': `Left sleeve close-up view of the garment. 
+    The left arm/sleeve is the focus of the shot. 
+    Show the sleeve design, cuff, and shoulder area clearly.
+    Same garment colors and style.`,
+    
+  'right sleeve': `Right sleeve close-up view of the garment.
+    The right arm/sleeve is the focus of the shot.
+    Show the sleeve design, cuff, and shoulder area clearly.
+    Same garment colors and style.`,
+};
+
+const prompt = `Photorealistic product mockup.
+${viewPrompts[view]}
+Garment: ${garmentColor} ${garmentType}.
+Design: ${userPrompt}.
+Style: ${styles}.
+Professional studio lighting. Pure dark background (#0a0a0a).
+High resolution. Realistic fabric texture.
+No watermarks. No extra text.
+Consistent with the front view design — same colors, same patterns, same overall aesthetic.`;
+```
+
+---
+
+## STEP 5 — VIEW TOGGLE BUTTON UI
+
+Update the view toggle buttons to show correct states:
+
+```typescript
+const views = ['front', 'back', 'left sleeve', 'right sleeve'] as const;
+
+// Button styling logic:
+const getViewButtonStyle = (view: string) => {
+  const isActive = currentView === view;
+  const isCached = !!viewCache[view]; // already generated, will load instantly
+  const isLoading = isViewSwitching && currentView === view;
+  
+  return {
+    background: isActive ? '#C9A84C' : 'transparent',
+    color: isActive ? '#000' : '#a0a0a0',
+    border: isActive 
+      ? 'none' 
+      : isCached 
+        ? '1px solid rgba(201,168,76,0.4)' // gold border = cached/ready
+        : '1px solid rgba(167,139,250,0.3)', // purple border = not yet generated
+    cursor: isLoading ? 'wait' : 'pointer',
+    opacity: isLoading ? 0.7 : 1,
+    position: 'relative' as const,
+  };
+};
+```
+
+Button JSX:
+```tsx
+<div style={{ display: 'flex', gap: '4px' }}>
+  {views.map((view) => {
+    const isActive = currentView === view;
+    const isCached = !!viewCache[view];
+    const isThisLoading = isViewSwitching && currentView === view;
+    
+    return (
+      <button
+        key={view}
+        onClick={() => handleViewChange(view)}
+        disabled={isViewSwitching}
+        style={getViewButtonStyle(view)}
+      >
+        {isThisLoading ? (
+          // Show spinner inside button while this view is loading
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <SpinnerIcon size={12} />
+            ...
+          </span>
+        ) : (
+          <>
+            {view.toUpperCase()}
+            {isCached && !isActive && (
+              // Small gold dot indicates cached/instant load
+              <span style={{
+                width: 4, height: 4,
+                background: '#C9A84C',
+                borderRadius: '50%',
+                position: 'absolute',
+                top: 4, right: 4,
+              }} />
+            )}
+          </>
+        )}
+      </button>
+    );
+  })}
+</div>
+```
+
+---
+
+## STEP 6 — LOADING STATE FOR VIEW SWITCHING
+
+When switching views, the loading state should be DIFFERENT from the initial generation:
+
+```typescript
+// Different cycling messages for view switching:
+const viewSwitchingMessages = {
+  'back': [
+    'Rotating garment...',
+    'Rendering back view...',
+    'Generating back panel...',
+  ],
+  'left sleeve': [
+    'Focusing on left sleeve...',
+    'Rendering sleeve detail...',
+    'Generating sleeve view...',
+  ],
+  'right sleeve': [
+    'Focusing on right sleeve...',
+    'Rendering sleeve detail...',
+    'Generating sleeve view...',
+  ],
+  'front': [
+    'Returning to front view...',
+    'Rendering front panel...',
+  ],
+};
+```
+
+Show these messages in the loading overlay instead of the default generation messages.
+
+Also: when view switching (not first generation), show a lighter loading overlay:
+- Instead of full black canvas with scan line
+- Show the PREVIOUS image at 40% opacity with a loading spinner overlay
+- This way user can see what they had while the new view loads
+
+```tsx
+{canvasMode === 'generating' && isViewSwitching && (
+  <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,10,10,0.7)', 
+                display: 'flex', flexDirection: 'column', 
+                alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+    <img 
+      src={generatedImageUrl || ''} 
+      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', 
+               objectFit: 'contain', opacity: 0.3 }} 
+    />
+    <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
+      <GoldSpinner />
+      <CyclingText messages={viewSwitchingMessages[currentView]} />
+    </div>
+  </div>
+)}
+```
+
+---
+
+## STEP 7 — PERSIST CURRENT PROMPT
+
+Make sure the prompt used for generation is stored in state so view switching can reuse it:
+
+```typescript
+const [currentPrompt, setCurrentPrompt] = useState('');
+const [currentStyleModifiers, setCurrentStyleModifiers] = useState<string[]>([]);
+
+// In handleGenerate, before the API call:
+setCurrentPrompt(prompt); // save the prompt
+setCurrentStyleModifiers(styleModifiers); // save style modifiers
+```
+
+---
+
+## STEP 8 — EDIT PANEL + VIEW SWITCHING
+
+When user applies an edit (color change, logo, structure):
+- Clear the view cache EXCEPT for the current view:
+```typescript
+  setViewCache({ [currentView]: newEditedImageUrl });
+```
+- This forces other views to regenerate with the edited design
+- Show a small notice: "Other views will regenerate with your edits applied"
+
+---
+
+## STEP 9 — PREFETCH BACK VIEW
+
+After front view generates successfully, silently prefetch the back view in background:
+
+```typescript
+const prefetchBackView = async () => {
+  if (viewCache['back']) return; // already cached
+  
+  try {
+    const response = await fetch('/api/generate-design', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-gemini-key': localStorage.getItem('gemini_api_key') || '' },
+      body: JSON.stringify({
+        prompt: currentPrompt,
+        styleModifiers: currentStyleModifiers,
+        garmentType: selectedProduct,
+        garmentColor: selectedColor,
+        view: 'back',
+      }),
+    });
+    const data = await response.json();
+    if (data.imageUrl) {
+      setViewCache(prev => ({ ...prev, back: data.imageUrl }));
+      // The BACK button will now show the gold dot (cached indicator)
+    }
+  } catch {
+    // Silent fail — prefetch is optional
+  }
+};
+
+// Call after successful generation (with 2s delay):
+setTimeout(prefetchBackView, 2000);
+```
+
+---
+
+## CHECKLIST
+- [ ] Clicking FRONT shows front view of garment
+- [ ] Clicking BACK shows back view of same garment/design
+- [ ] Clicking LEFT SLEEVE shows left sleeve close-up
+- [ ] Clicking RIGHT SLEEVE shows right sleeve close-up
+- [ ] Each view calls Gemini with correct view-specific prompt
+- [ ] currentPrompt and currentStyleModifiers saved in state for reuse
+- [ ] View cache stores each generated view (no regeneration on revisit)
+- [ ] Gold dot on button indicates cached/instant-load view
+- [ ] Loading overlay shows previous image at 30% opacity while switching
+- [ ] View-specific loading messages show during switch
+- [ ] Active button: gold background black text
+- [ ] Other buttons disabled while switching
+- [ ] Back view prefetches silently after front generates
+- [ ] Edit applied clears view cache except current view
+- [ ] No console errors
+- [ ] Works on mobile (buttons scroll horizontally if needed)

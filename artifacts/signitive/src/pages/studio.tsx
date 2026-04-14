@@ -638,24 +638,57 @@ export default function Studio() {
     return "";
   };
 
+  // ── Pollinations (client-side, with canvas→base64 conversion for editing) ──
+  const generateWithPollinations = async (promptWithProduct: string, finalPrompt: string) => {
+    const styleParts = STYLE_TAGS.filter(t => selectedStyles.includes(t.label)).map(t => t.prompt).join(", ");
+    const full = [promptWithProduct, styleParts, "apparel graphic design, professional product mockup, dark background, high quality"].filter(Boolean).join(", ");
+    const seed = Math.floor(Math.random() * 99999);
+    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(full)}?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
+
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("Failed to load image"));
+      img.src = url;
+      setTimeout(() => reject(new Error("Image load timed out")), 45000);
+    });
+
+    let imageDataUrl: string;
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth || 1024;
+      canvas.height = img.naturalHeight || 1024;
+      canvas.getContext("2d")!.drawImage(img, 0, 0);
+      imageDataUrl = canvas.toDataURL("image/jpeg", 0.92);
+    } catch {
+      imageDataUrl = url;
+    }
+
+    setGeneratedImageUrl(imageDataUrl);
+    addToHistory(finalPrompt, imageDataUrl, "Generated");
+    setUndoStack([]);
+    toast({ title: "Design ready!", description: "Generated with Pollinations AI. Add a Gemini key for AI editing." });
+  };
+
   // ── Generate ──
-  const doGenerate = async (finalPrompt: string, fallback = false) => {
+  const doGenerate = async (finalPrompt: string, _fallback = false) => {
     setIsGenerating(true);
     setGeneratedImageUrl(null);
     resetPos();
 
-    // Append product name to prompt if product is selected
     const productSuffix = selectedProductData ? ` on a ${garmentColor.label} ${selectedProductData.name}` : "";
     const promptWithProduct = finalPrompt + productSuffix;
 
     try {
-      if (!fallback && geminiKey) {
+      if (geminiKey) {
         const res = await fetch("/api/generate-design", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-gemini-key": geminiKey },
           body: JSON.stringify({ prompt: promptWithProduct, styleModifiers: selectedStyles, garmentType, garmentColor: garmentColor.label, view: activeAngle.toLowerCase() }),
         });
         const resData = await res.json().catch(() => ({}));
+
         if (res.ok && resData.imageUrl) {
           setGeneratedImageUrl(resData.imageUrl);
           addToHistory(finalPrompt, resData.imageUrl, "Generated");
@@ -663,28 +696,18 @@ export default function Studio() {
           toast({ title: "Design generated!", description: "Your garment visualization is ready." });
           return;
         }
-        if (resData.code === "NO_API_KEY" || resData.code === "INVALID_KEY") {
+
+        if (resData.code === "INVALID_KEY") {
           toast({ title: "API key issue", description: resData.error, variant: "destructive" });
           setApiKeyOpen(true);
           setTimeout(() => apiKeyRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 200);
-          setIsGenerating(false); return;
+          return;
         }
-        toast({ title: "Switching to Pollinations AI", description: "Gemini unavailable — generating with free AI instead.", variant: "default" });
+
+        toast({ title: "Switching to Pollinations AI", description: "Gemini unavailable — using free AI instead.", variant: "default" });
       }
 
-      // Pollinations fallback
-      const styleParts = STYLE_TAGS.filter(t => selectedStyles.includes(t.label)).map(t => t.prompt).join(", ");
-      const full = [promptWithProduct, styleParts, "apparel graphic design, t-shirt print, high quality, dark background, centered, professional product mockup"].filter(Boolean).join(", ");
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(full)}?width=1024&height=1024&nologo=true&seed=${Math.floor(Math.random()*99999)}&model=flux`;
-      await new Promise<void>((resolve, reject) => {
-        const img = new Image(); img.crossOrigin = "anonymous";
-        img.onload = () => resolve(); img.onerror = () => reject(new Error("Failed to load"));
-        img.src = url; setTimeout(() => reject(new Error("Timeout")), 35000);
-      });
-      setGeneratedImageUrl(url);
-      addToHistory(finalPrompt, url, "Generated");
-      setUndoStack([]);
-      toast({ title: "Design ready!", description: "Generated with Pollinations AI. Add a Gemini key for AI editing." });
+      await generateWithPollinations(promptWithProduct, finalPrompt);
     } catch (err: any) {
       toast({ title: "Generation failed", description: err.message || "Try again", variant: "destructive" });
     } finally {
@@ -694,17 +717,17 @@ export default function Studio() {
 
   const handleGenerate = () => {
     if (!prompt.trim()) return;
-    doGenerate(prompt.trim(), !geminiKey);
+    doGenerate(prompt.trim());
   };
 
   const handleGenWithPollinations = () => {
     if (!prompt.trim()) return;
-    doGenerate(prompt.trim(), true);
+    doGenerate(prompt.trim());
   };
 
   const handleQuickChip = (chip: typeof QUICK_CHIPS[0]) => {
     setPrompt(chip.prompt);
-    setTimeout(() => doGenerate(chip.prompt, !geminiKey), 50);
+    setTimeout(() => doGenerate(chip.prompt), 50);
   };
 
   const handleRegenerate = () => {
@@ -716,12 +739,12 @@ export default function Studio() {
   const handleApplyEdit = async () => {
     const imageData = getImageBase64();
     if (!imageData) {
-      toast({ title: "Editing unavailable", description: "AI editing requires a Gemini-generated image. Add your API key and generate first.", variant: "destructive" }); return;
+      toast({ title: "No design to edit", description: "Generate a design first, then use the edit tools.", variant: "destructive" }); return;
     }
     if (!geminiKey) {
       setApiKeyOpen(true);
       setTimeout(() => apiKeyRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 200);
-      toast({ title: "API key required", description: "Add your Gemini API key to use AI editing.", variant: "destructive" }); return;
+      toast({ title: "API key required for editing", description: "Add your Gemini API key to use AI-powered editing.", variant: "destructive" }); return;
     }
     const editPrompt = buildEditPrompt(); if (!editPrompt) return;
     let msgSet = EDIT_MESSAGES.colors;

@@ -22,7 +22,7 @@ router.post("/generate-design", async (req, res) => {
 
     if (!apiKey) {
       return res.status(400).json({
-        error: "No Gemini API key provided. Please enter your API key in the studio.",
+        error: "No Gemini API key provided.",
         code: "NO_API_KEY",
       });
     }
@@ -72,7 +72,7 @@ No extra text, no watermarks, no background clutter.`;
     }
 
     const imageUrl = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
-    res.json({ success: true, imageUrl });
+    res.json({ success: true, imageUrl, engine: "gemini" });
   } catch (err: any) {
     console.error("[generate-design]", err);
     res.status(500).json({ error: "Internal server error during image generation" });
