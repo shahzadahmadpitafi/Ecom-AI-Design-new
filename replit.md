@@ -28,12 +28,14 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 
 ## Signitive Enterprises — Platform
 
-### Brand
-- **Colors**: Background `#0a0a0a`, Primary Gold `#C9A84C`, Secondary text `#A0A0A0`
+### Brand — "Cyberpunk Gold" Design System
+- **Colors**: Background `#0a0a0a`, Gold `#C9A84C`, Purple `#a78bfa`, Cyan `#22d3ee`, Secondary `#A0A0A0`, WhatsApp `#25d366`, Alibaba `#FF6A00`
 - **Fonts**: Bebas Neue (display/headlines via `--font-display`), Inter (body)
-- **Style**: Sharp corners (border-radius: 0), glass-morphism cards (`.glass-card`)
+- **Style**: Sharp corners (border-radius: 0), gold grid background, scan line overlays, purple/gold glows, no glass-morphism
 - **WhatsApp**: +923114661392
 - **Alibaba**: signitiveenterprises.trustpass.alibaba.com
+- **CSS animations**: `animate-purple-border`, `animate-scanline`, `animate-pulse-glow`, `animate-cursor`, `animate-float`, `animate-marquee`
+- **Shared UI**: `GoldGrid`, `ScanLine`, `PurpleGlow`, `GoldGlow`, `LiveBadge`, `GoldDivider`, `CountUp`, `ScrollToTop` (all in `src/components/ui/`)
 
 ### Artifacts
 

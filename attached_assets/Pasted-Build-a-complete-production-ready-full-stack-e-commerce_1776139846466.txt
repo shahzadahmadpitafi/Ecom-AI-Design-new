@@ -1,0 +1,742 @@
+Build a complete, production-ready, full-stack e-commerce and AI design platform for Signitive Enterprises — a premium custom apparel manufacturer based in Sialkot, Pakistan. This is a complete rebuild with every feature included.
+
+---
+
+## TECH STACK
+- Next.js 14 (App Router)
+- TypeScript
+- Tailwind CSS
+- Supabase (PostgreSQL + Auth + Storage)
+- Gemini API (google/generative-ai) for AI image generation
+- Framer Motion for animations
+- Stripe for payments
+- Resend for emails
+- @tabler/icons-react for icons
+
+Install all packages:
+npm install @google/generative-ai @supabase/supabase-js framer-motion @tabler/icons-react stripe resend next-themes
+
+---
+
+## ENVIRONMENT VARIABLES (.env.local)
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+GEMINI_API_KEY=
+STRIPE_SECRET_KEY=
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=
+RESEND_API_KEY=
+NEXT_PUBLIC_SITE_URL=
+NEXT_PUBLIC_WHATSAPP_NUMBER=923114661392
+
+---
+
+## BRAND IDENTITY
+- Brand: Signitive Enterprises
+- Tagline: "Design. Manufacture. Dominate."
+- Location: Sialkot, Punjab, Pakistan
+- Contact: +92 311 4661392 | info@signitiveenterprises.com
+- Website: www.signitiveenterprises.com
+- Alibaba: https://signitiveenterprises.trustpass.alibaba.com
+- Colors: Black #0a0a0a, Gold #C9A84C, Purple #a78bfa, Cyan #22d3ee
+- Fonts: Bebas Neue (headings), Inter (body)
+- Style: Cyberpunk Gold — purple neon + gold accents on deep black
+
+---
+
+## GLOBAL DESIGN SYSTEM
+
+### CSS Variables (globals.css):
+:root {
+  --gold: #C9A84C;
+  --gold-dim: rgba(201,168,76,0.12);
+  --gold-border: rgba(201,168,76,0.25);
+  --purple: #a78bfa;
+  --purple-dim: rgba(167,139,250,0.12);
+  --purple-border: rgba(167,139,250,0.25);
+  --cyan: #22d3ee;
+  --bg: #0a0a0a;
+  --bg-card: #111111;
+  --bg-elevated: #1a1a1a;
+  --text: #ffffff;
+  --text-muted: #a0a0a0;
+  --text-dim: #555555;
+}
+
+### Global Rules:
+- Background: #0a0a0a everywhere
+- Zero border-radius on ALL elements (cards, buttons, inputs, badges)
+- All borders: 1px solid rgba(167,139,250,0.2) default, gold on hover/active
+- Scrollbar: 4px wide, track #111, thumb #C9A84C
+- Selection color: background #a78bfa, text #000
+- All headings: Bebas Neue, letter-spacing 0.05em
+- All body text: Inter
+
+### Reusable Animation Components (/components/ui/):
+
+GoldGrid.tsx — subtle grid background:
+background-image: linear-gradient(rgba(167,139,250,0.06) 1px, transparent 1px),
+linear-gradient(90deg, rgba(201,168,76,0.06) 1px, transparent 1px);
+background-size: 40px 40px;
+position: absolute; inset: 0; pointer-events: none;
+
+PurpleGlow.tsx — radial glow:
+position absolute, 500x300px
+background: radial-gradient(ellipse, rgba(139,92,246,0.18) 0%, transparent 70%)
+animate: translateY -15px to 15px, 6s ease-in-out infinite
+
+GoldGlow.tsx — gold radial glow:
+same but rgba(201,168,76,0.12)
+
+ScanLine.tsx — horizontal sweep:
+position absolute, width 100%, height 1px
+background: linear-gradient(90deg, transparent, #a78bfa, #C9A84C, transparent)
+animate: top 0% to 100%, 2.5s linear infinite
+
+ShimmerButton.tsx:
+background: #C9A84C, color: #000, font-weight: 700
+letter-spacing: 0.15em, text-transform: uppercase, font-size: 11px
+padding: 14px 32px, border-radius: 0
+hover: white shimmer sweep left to right (CSS keyframe)
+framer-motion whileTap: scale 0.97
+
+PurpleOutlineButton.tsx:
+background: transparent, border: 1px solid rgba(167,139,250,0.5), color: #a78bfa
+hover: background rgba(167,139,250,0.08)
+
+GoldOutlineButton.tsx:
+background: transparent, border: 1px solid rgba(201,168,76,0.5), color: #C9A84C
+hover: background rgba(201,168,76,0.08)
+
+CountUp.tsx:
+Animates number from 0 to target on viewport entry
+Intersection Observer, 2s ease-out duration
+
+FadeSlideUp.tsx:
+framer-motion: initial opacity 0 y 30, whileInView opacity 1 y 0
+stagger delay prop
+
+GoldDivider.tsx:
+Two thin lines (rgba(201,168,76,0.2)) with centered label
+Label: 9px, letter-spacing 4px, color #a78bfa, uppercase
+
+LiveBadge.tsx:
+Pulsing purple dot + text
+background rgba(167,139,250,0.1), border rgba(167,139,250,0.3), color #a78bfa
+
+---
+
+## DATABASE SCHEMA (Supabase)
+
+Create these tables:
+
+products:
+- id uuid primary key
+- name text
+- category text (Streetwear | Fitness Wear | Sports Uniforms | Boxing | Motocross | Caps | Team Wear | Sports Goods)
+- subcategory text
+- description text
+- base_price_pkr numeric
+- base_price_usd numeric
+- available_colors text[] default ['Black','White','Grey','Navy','Maroon','Olive','Royal Blue','Red','Forest Green','Burgundy']
+- available_sizes text[] default ['XS','S','M','L','XL','2XL','3XL']
+- fabric_options text[]
+- gsm_options text[]
+- min_order_quantity integer default 25
+- is_customizable boolean default true
+- image_url text
+- created_at timestamptz default now()
+
+designs:
+- id uuid primary key
+- user_id uuid references auth.users
+- prompt text
+- style_modifiers text[]
+- garment_type text
+- garment_color text
+- image_url text
+- created_at timestamptz default now()
+
+quotes:
+- id uuid primary key
+- customer_name text
+- customer_email text
+- customer_phone text
+- product_id uuid references products
+- product_name text
+- garment_color text
+- garment_size text
+- fabric text
+- gsm text
+- quantity integer
+- unit_price_pkr numeric
+- total_price_pkr numeric
+- discount_percent numeric
+- design_image_url text
+- design_prompt text
+- brand_label boolean default false
+- status text default 'pending'
+- whatsapp_sent boolean default false
+- created_at timestamptz default now()
+
+---
+
+## SEED ALL PRODUCTS
+
+Create /app/api/seed-products/route.ts and seed these products on GET request:
+
+STREETWEAR:
+Track Suits (PKR 3500), Fashion Jackets (PKR 4500), T-Shirts Regular (PKR 1800),
+Oversized T-Shirts (PKR 2000), Polo Shirts (PKR 2200), Hoodies (PKR 2800),
+Oversized Hoodies (PKR 3000), Sweatshirts (PKR 2600), Oversized Sweatshirts (PKR 2800),
+Windbreakers (PKR 4000), Softshell Jackets (PKR 4500), Quarter-Zips (PKR 3200),
+Varsity/Letterman Jackets (PKR 5000), Trousers (PKR 2000),
+Tank Tops Men (PKR 1500), Tank Tops Women (PKR 1500), Beanie Hats (PKR 800),
+Baseball Hats (PKR 900)
+
+FITNESS WEAR:
+Gym T-Shirts (PKR 1800), Rashguards (PKR 2500), Sports Bras (PKR 1800),
+Sublimation Bras (PKR 2000), Crop Tops (PKR 1600), Men's Shorts (PKR 1500),
+Women's Shorts (PKR 1500), Leggings (PKR 2200)
+
+SPORTS UNIFORMS:
+Soccer Uniforms (PKR 3500), American Football Uniforms (PKR 5500),
+Basketball Jerseys & Shorts (PKR 3200), Baseball Jerseys & Pants (PKR 3800),
+Baseball Button-ups (PKR 3000), Rugby Uniforms (PKR 4000),
+Ice Hockey Uniforms (PKR 6000)
+
+SPORTS GOODS (is_customizable: false):
+Basketballs (PKR 2500), Tennis Balls PKR 800, Soccer Balls (PKR 2000),
+Cricket Balls (PKR 1200), Rugby Balls (PKR 2200)
+
+TEAM WEAR:
+School Uniforms (PKR 2800), Rugby Uniforms (PKR 4000), Ice Hockey Uniforms (PKR 6000)
+
+BOXING:
+Boxing Shorts (PKR 2200), Boxing Gloves (PKR 3500), Boxing Shin Pads (PKR 2800),
+Boxing Head Guards (PKR 3200), Boxing Chest Guards (PKR 2800),
+Boxing Thai Pads (PKR 3000), Boxing Robes (PKR 3500)
+
+MOTOCROSS:
+Motocross Sets (PKR 8000), Motocross Jerseys (PKR 4000), Motocross Pants (PKR 4500),
+Motocross Jackets (PKR 6000), Motocross Gloves (PKR 2500),
+Body Armour (PKR 5000), Knee Pads (PKR 2000)
+
+CAPS:
+Trucker Hats (PKR 1200), Baseball Caps (PKR 1000),
+Bucket Hats (PKR 1100), Beanie Hats (PKR 800)
+
+For each product:
+- Write a professional 2-sentence manufacturing description
+- base_price_usd = base_price_pkr / 280 (rounded to 2 decimals)
+- fabric_options: relevant per category
+  Streetwear: ['100% Cotton', 'Cotton-Poly Blend', 'Polyester']
+  Fitness: ['Polyester', 'Spandex Blend', 'Dri-Fit']
+  Sports: ['Polyester Sublimation', 'Mesh']
+  Boxing/Motocross: ['Satin', 'Polyester', 'Leather']
+- gsm_options: relevant per category
+  T-shirts/basics: ['160gsm','180gsm','220gsm']
+  Hoodies/jackets: ['280gsm','320gsm','380gsm']
+  Sportswear: ['120gsm','140gsm','160gsm']
+- image_url: relevant Unsplash URL per category
+
+---
+
+## GEMINI AI DESIGN GENERATION
+
+### /lib/gemini.ts:
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+export async function generateGarmentDesign({ userPrompt, styleModifiers, garmentType, garmentColor, view, apiKey }) {
+  const key = apiKey || process.env.GEMINI_API_KEY;
+  const genAI = new GoogleGenerativeAI(key);
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+
+  const styleDescriptions = {
+    'Vintage': 'vintage distressed aesthetic, worn texture, retro color palette',
+    'Bold': 'bold graphic design, high contrast, strong typography',
+    'Streetwear': 'urban streetwear aesthetic, oversized graphic',
+    'Luxury': 'premium luxury embroidery look, sophisticated design',
+    'Grunge': 'grunge aesthetic, dark tones, rough edges, punk influence',
+    'Minimalist': 'clean minimal design, single color, simple elegant lines',
+  };
+
+  const styles = styleModifiers.map(m => styleDescriptions[m] || m).join(', ');
+
+  const prompt = `Photorealistic product mockup of a ${garmentColor} ${garmentType}, ${view} view.
+Custom printed graphic: ${userPrompt}.
+Design style: ${styles || 'modern streetwear'}.
+The design is printed directly on the garment fabric.
+Shot style: ghost mannequin OR flat lay, professional studio lighting, pure dark background.
+The garment looks premium and ready for sale.
+High resolution, sharp details, realistic fabric texture visible.
+No extra text, no watermarks, no background clutter.`;
+
+  const result = await model.generateContent({
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: { responseModalities: ['image', 'text'] },
+  });
+
+  const parts = result.response.candidates?.[0]?.content?.parts;
+  const imagePart = parts?.find(p => p.inlineData);
+  if (imagePart?.inlineData) {
+    return {
+      imageUrl: `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`
+    };
+  }
+  throw new Error('No image generated by Gemini');
+}
+
+### /app/api/generate-design/route.ts:
+POST endpoint that:
+- Accepts: prompt, styleModifiers, garmentType, garmentColor, view, apiKey (from header x-gemini-key)
+- Calls generateGarmentDesign()
+- Returns: { success: true, imageUrl }
+- Error handling for rate limits, invalid key, no image returned
+
+---
+
+## PAGE: NAVBAR (/components/layout/Navbar.tsx)
+
+- Background: rgba(10,10,10,0.92) backdrop-blur-md
+- Border-bottom: 1px solid rgba(167,139,250,0.15)
+- Sticky top-0 z-50
+- Logo: ⚡ SIGNITIVE ENTERPRISES in Bebas Neue, gold lightning + purple ENTERPRISES
+- Nav links: STUDIO | CATALOG | QUOTE | ABOUT | CONTACT
+  - 10px, letter-spacing 0.15em, uppercase, color #a0a0a0
+  - Hover: color #a78bfa, 1px purple underline slides in from left
+- Right side:
+  - PKR/USD toggle (pill switch, gold active state)
+  - Alibaba TrustPass badge (small gold badge, links to Alibaba store)
+  - Cart icon (Tabler icon)
+  - ShimmerButton "START DESIGNING"
+- Mobile: hamburger menu, full-screen dark overlay nav
+
+---
+
+## PAGE: HOMEPAGE (/app/page.tsx)
+
+### Hero Section:
+- Full viewport height, position relative, overflow hidden
+- GoldGrid background layer
+- PurpleGlow top-left, GoldGlow top-right
+- Center content:
+  - LiveBadge: "⚡ AI-Powered Custom Manufacturing — Sialkot, Pakistan"
+  - Headline (Bebas Neue 88px desktop / 52px mobile):
+    Line 1: "DESIGN." (white)
+    Line 2: "MANUFACTURE." (color: #a78bfa, purple neon)
+    Line 3: "DOMINATE." (color: #C9A84C, gold)
+  - Each line FadeSlideUp with 0.1s stagger
+  - Subheadline: "From Your Idea to 500 Units in 15 Days"
+  - Two CTAs: ShimmerButton "⚡ Start Designing Free" + PurpleOutlineButton "Browse Catalog →"
+  - Stats grid (4 cols, separated by purple lines, CountUp animation):
+    500+ Clients | 50+ Countries | 1M+ Units | 15yr Experience
+  - Animated down arrow (bounce, gold)
+- ScanLine sweeping across full hero
+- Bottom edge: thin purple-to-gold gradient line
+
+### Category Grid Section:
+- GoldDivider: "OUR COLLECTIONS"
+- 4x2 grid, gap 1px, background rgba(167,139,250,0.1)
+- Each card:
+  - Background #111
+  - Top: 2px purple line that reveals left-to-right on hover (CSS transition)
+  - Bottom: 2px gold line always visible
+  - Tabler icon (large, purple) + category name (Bebas Neue 20px white) + count (gold 11px)
+  - Top-right: → arrow slides right on hover
+  - framer-motion whileHover scale 1.02
+  - FadeSlideUp stagger
+  - onClick: navigate to /catalog?category=X
+
+### AI Studio Showcase:
+- Dark section, GoldGrid background
+- Two columns:
+  Left: LiveBadge "CORE FEATURE" + headline "Design Your Collection in 30 Seconds" + 3 numbered steps (01 02 03 in gold) + ShimmerButton "Try AI Studio Free"
+  Right: Animated mockup card showing:
+    - Dark card with purple border glow
+    - Fake prompt input with blinking cursor animation
+    - ScanLine animation inside
+    - t-shirt silhouette outline
+    - "GENERATING..." text pulsing
+    - Corner badge: "AI ACTIVE" in gold
+
+### Manufacturing Steps:
+- GoldDivider: "HOW WE WORK"
+- 5 steps in a row, connected by dashed purple line that draws left-to-right on scroll
+- Each: square number badge (purple border, gold number) + label in Bebas Neue
+- Steps: Design → Sample → Produce → QC Check → Ship
+
+### Trust Signals:
+- Row: Alibaba TrustPass badge | "Sialkot — World Capital of Sportswear" | DHL/FedEx badge
+- All gold bordered, dark background
+
+### Testimonials:
+- GoldDivider: "WHAT CLIENTS SAY"
+- 3 cards, dark glass (#111), purple border
+- Large gold quote mark (opacity 0.15) behind text
+- Testimonials:
+  1. "Ordered 200 custom hoodies, quality exceeded expectations. Delivered to UK in 12 days." — James T., United Kingdom
+  2. "The AI design tool is incredible. We launched our streetwear brand in 3 weeks." — Maria K., United States
+  3. "Best custom manufacturer we've found. MOQ is reasonable and communication is excellent." — Ahmed R., UAE
+- FadeSlideUp stagger
+
+### Free Sample CTA:
+- Full-width section, purple-to-gold gradient border top and bottom
+- Background #0f0f0f
+- Headline: "NOT READY TO COMMIT?" (Bebas Neue 48px gold)
+- Body: "Order 1 sample garment first. PKR 2,500 — fully deducted from your bulk order."
+- ShimmerButton "Order a Sample"
+
+### Footer:
+- Background #060606, border-top rgba(201,168,76,0.15)
+- 4 columns: Logo+tagline | Quick Links | Products | Contact
+- Logo: ⚡ SIGNITIVE ENTERPRISES + "Premium Custom Apparel, Made in Pakistan"
+- Contact: phone, email, address, WhatsApp link, Alibaba link
+- Bottom strip: copyright left | "Made in Sialkot 🇵🇰" center | social icons right
+- Thin purple-to-gold gradient line at very top of footer
+
+---
+
+## PAGE: AI DESIGN STUDIO (/app/studio/page.tsx)
+
+### Layout: Three-panel on desktop, stacked on mobile
+
+LEFT PANEL (300px, fixed):
+- Product selector: visual grid of product type icons (click to select)
+- Garment color swatches: 10 colors with gold ring + checkmark on selected
+- Size buttons: XS S M L XL 2XL 3XL (gold bg + black text when selected)
+- Fabric dropdown (dark, gold border on focus)
+- GSM dropdown
+- Brand label: premium toggle switch (purple when on)
+- All sections separated by thin gold divider
+
+CENTER PANEL (flex-1):
+State 1 — Empty:
+  Dark area, Signitive logo watermark (opacity 0.05)
+  Text: "Your AI-generated design will appear here"
+  Purple pulsing border animation
+  
+State 2 — Generating:
+  Full dark area
+  ScanLine sweeping animation (purple to gold)
+  Cycling loading text (fade in/out every 2s):
+    "Analyzing your prompt..."
+    "Generating design..."
+    "Placing on garment..."
+    "Finalizing your creation..."
+  Small gold spinner top-right corner
+  
+State 3 — Generated:
+  Generated image fills the entire center area (object-fit: contain)
+  Image fades in smoothly (framer-motion opacity 0→1)
+  View toggle at bottom: [FRONT] [BACK] [LEFT SLEEVE] [RIGHT SLEEVE]
+    Active: gold background black text
+    Inactive: dark purple border
+  Bottom-left: small watermark "Generated by Signitive AI"
+
+RIGHT PANEL (320px):
+- Tab bar: [AI GENERATE] [UPLOAD] [TEXT]
+
+AI GENERATE TAB:
+  - "DESCRIBE YOUR DESIGN" label
+  - Large textarea (min 120px height):
+    Placeholder: "e.g. A vintage eagle with lightning bolts, gothic lettering..."
+    Gold border glow on focus
+    Character count: X/300 bottom right
+  - Style modifiers section:
+    [VINTAGE] [MINIMALIST] [BOLD] [STREETWEAR] [LUXURY] [GRUNGE]
+    Unselected: dark + purple border
+    Selected: solid purple background + white text
+    Multiple selectable
+  - ShimmerButton "⚡ GENERATE DESIGN" (full width, disabled if prompt empty)
+  - After generation — Refine section:
+    Small input: "Refine this design..."
+    Chips: "Make it darker" | "Add text" | "Change colors" | "Make it bigger"
+    On submit: appends refinement to original prompt, regenerates
+  - Generated design thumbnail (if exists)
+  - "REGENERATE WITH VARIATION" button (PurpleOutlineButton)
+  - "ADD TO QUOTE →" ShimmerButton
+
+UPLOAD TAB:
+  - Drag and drop zone (purple dashed border)
+  - Or click to upload (PNG, SVG, JPG, AI)
+  - On upload: display in center panel
+  - "Remove Background" button (calls remove.bg or Replicate)
+
+TEXT TAB:
+  - Text input for custom text
+  - Font selector (Google Fonts: Bebas Neue, Inter, Oswald, Barlow)
+  - Size slider
+  - Color picker (gold default)
+  - Position: [Chest] [Back] [Sleeve] [Full Front]
+
+DESIGN HISTORY (bottom strip below center):
+  - Thumbnail row of past generated designs (session only, max 10)
+  - Click to reload in center panel
+  - Timestamp + truncated prompt on hover
+
+GEMINI API KEY FALLBACK:
+  If GEMINI_API_KEY env not set, show banner:
+  "Enter your Gemini API key to enable AI generation"
+  Input + "Save" button → stores in localStorage as 'gemini_api_key'
+  Pass from localStorage via x-gemini-key request header
+
+---
+
+## PAGE: CATALOG (/app/catalog/page.tsx)
+
+- URL params: /catalog?category=X&search=Y
+- Layout: sidebar filters (240px) + main product grid
+
+SIDEBAR:
+  - Search: dark input, purple border on focus, gold search icon
+  - Category filter (all 8, purple checkboxes)
+  - Fabric type filter
+  - MOQ filter (All / Under 50 / 50-100 / 100+)
+  - Price range slider (PKR / USD toggle)
+  - Customizable only toggle
+  - "Clear All" link (gold)
+
+PRODUCT GRID (responsive: 1 col mobile, 2 col tablet, 3 col desktop):
+  Each card:
+  - Background #111, no border-radius, border rgba(167,139,250,0.1)
+  - Top: 2px purple line reveals on hover (left to right, 0.3s)
+  - Product image (Unsplash placeholder, aspect-ratio 4/3, object-fit cover)
+  - Category badge (purple pill, 8px uppercase)
+  - Product name (Bebas Neue 20px)
+  - "From PKR X / unit" (white) + "From $X / unit" (gold, smaller)
+  - "MOQ: 25 units" (purple, 10px)
+  - Two buttons: ShimmerButton "Customize →" | GoldOutlineButton "Get Quote"
+  - framer-motion whileHover scale 1.01
+
+BOTTOM BANNER:
+  "Can't find what you need? We manufacture almost anything."
+  WhatsApp CTA button (green)
+
+---
+
+## PAGE: QUOTE ENGINE (/app/quote/page.tsx)
+
+PRODUCT TABLE:
+  - Product name | Color | Size | Fabric | GSM | Quantity input | Unit Price | Discount | Total
+  - Dark table, gold header text, alternating row backgrounds #0f0f0f / #111
+  - Quantity input: dark, gold border, + and - buttons
+  - Remove row button (red X)
+
+MOQ PROGRESS BAR:
+  - Dark track, gold fill animates as quantity changes
+  - Glowing gold dot at tip of fill
+  - Tier labels above: Starter | Growth (50+, 10% off) | Scale (100+, 20% off) | Enterprise (200+, 25% off)
+  - "Add X more units to unlock Y% off!" text updates live
+  - Discount tiers:
+    1-49: base price
+    50-99: 10% off
+    100-199: 20% off
+    200+: 25% off, show "Contact for custom pricing"
+
+SAVINGS DISPLAY:
+  - "YOU SAVE: PKR X" in large Bebas Neue gold, CountUp animation
+  - Show both PKR and USD
+
+PRODUCTION TIMELINE:
+  - 1-49 units: 7-10 working days
+  - 50-99 units: 10-12 working days
+  - 100-199 units: 12-15 working days
+  - 200+ units: "Contact us for timeline"
+
+CUSTOMER DETAILS FORM:
+  - Name, Email, WhatsApp Number, Country
+  - Dark inputs, purple border on focus
+
+SUBMIT ACTIONS:
+  1. "SEND QUOTE TO WHATSAPP" (green button):
+     Opens wa.me/923114661392 with pre-filled message:
+     "Hi Signitive! I'd like a quote for:
+     Product: [name]
+     Color: [color]
+     Size: [size]
+     Fabric: [fabric]
+     GSM: [gsm]
+     Quantity: [qty]
+     Brand Label: [yes/no]
+     Design: [prompt or 'No design']
+     Total: PKR [total] (after [X]% discount)
+     My name: [name]"
+
+  2. "REQUEST FORMAL QUOTE" (ShimmerButton):
+     Saves to Supabase quotes table
+     Sends email to info@signitiveenterprises.com via Resend
+     Shows confirmation: "Quote sent! We'll respond within 1 hour on WhatsApp."
+
+FREE SAMPLE UPSELL:
+  - Box at bottom: "Not ready for bulk? Order 1 sample — PKR 2,500, deducted from bulk order"
+  - "Add Sample to Quote" button
+
+---
+
+## PAGE: ABOUT (/app/about/page.tsx)
+
+- Hero: "ABOUT SIGNITIVE" headline + tagline
+- Company story: "Founded in Sialkot — the city that manufactures 70% of the world's surgical instruments and a significant share of its sporting goods — Signitive Enterprises brings the same precision craftsmanship to custom apparel."
+- Manufacturing capabilities grid (6 cards with Tabler icons):
+  Sublimation Printing | Screen Printing | Embroidery | DTF Printing | Cut & Sew | Custom Labels
+- Stats: same CountUp stats as homepage
+- Factory gallery section (4 placeholder dark cards with camera icon)
+- For International Buyers section:
+  Payment: T/T Bank Transfer | PayPal | Wise | Western Union
+  Shipping: DHL Express | FedEx | Sea Freight
+  Sampling: "We ship samples worldwide — 3-5 days to US/UK/UAE"
+  MOQ: "Minimum 25 units per design for international orders"
+- Certifications placeholder section
+
+---
+
+## PAGE: CONTACT (/app/contact/page.tsx)
+
+- Split layout: WhatsApp (primary, left 60%) | Email form (right 40%)
+- WhatsApp side:
+  - Large green WhatsApp icon
+  - "Chat with us — Usually replies in 1 hour"
+  - "+92 311 4661392" in large Bebas Neue
+  - Green ShimmerButton: "Open WhatsApp Now"
+  - Hours: Mon-Sat 9am-6pm PKT
+- Email form:
+  - Name, Email, Subject, Message
+  - Dark inputs, purple focus
+  - Submit via Resend API
+- Address card:
+  Street No. 02, Gulshan Toheed Town, Defence Road, Sialkot, Punjab, Pakistan
+- Alibaba TrustPass card with link
+
+---
+
+## FLOATING ELEMENTS (ALL PAGES)
+
+WhatsApp button (bottom right):
+  - Circle 56px, background #25d366
+  - Icon: WhatsApp SVG
+  - Pulsing glow: box-shadow 0 0 0 0 → 0 0 0 20px rgba(37,211,102,0) every 2s
+  - Tooltip on hover: "Chat with us — Usually replies in 1 hour"
+  - framer-motion: slides up from bottom on page load, 1s delay
+
+Scroll to top (bottom left):
+  - Appears after 400px scroll
+  - Gold border, dark bg, ↑ arrow
+  - Smooth scroll to top
+
+Cookie banner (bottom center):
+  - Dark, purple border
+  - "Accept" (gold) | "Decline" (outlined)
+  - Disappears after choice, stores in localStorage
+
+---
+
+## SEO (/app/layout.tsx and individual pages)
+
+Homepage:
+  title: "Custom Apparel Manufacturer Pakistan | Signitive Enterprises"
+  description: "Pakistan's premier custom apparel manufacturer. Bulk t-shirts, hoodies, sportswear. AI design studio. MOQ 25 units. Ships worldwide from Sialkot."
+  keywords: custom apparel manufacturer Pakistan, bulk t-shirts Sialkot, custom sportswear manufacturer
+
+Studio:
+  title: "AI Custom Apparel Designer | Design Clothing Online | Signitive"
+  description: "Design custom clothing in seconds using AI. Type a prompt, see it on your garment, place bulk order. No design skills needed."
+
+Catalog:
+  title: "Custom Apparel Catalog | Streetwear, Sports, Fitness | Signitive"
+
+Quote:
+  title: "Get a Bulk Manufacturing Quote | Signitive Enterprises"
+
+All pages:
+  - Open Graph image (dark bg, gold logo, tagline)
+  - Twitter Card
+  - Canonical URLs
+  - JSON-LD LocalBusiness schema on homepage
+  - robots.txt
+  - sitemap.xml (auto-generated from pages + products)
+
+---
+
+## CURRENCY TOGGLE
+
+- Context: CurrencyContext with PKR/USD state
+- Toggle in navbar (pill switch)
+- All prices across site update instantly
+- Exchange rate: 1 USD = 280 PKR (with small note "Rate approximate")
+- Format: PKR 1,800 / $6.43
+
+---
+
+## ANIMATIONS SUMMARY
+
+- Hero headline: FadeSlideUp stagger per line
+- Stats: CountUp on viewport entry
+- Category cards: FadeSlideUp stagger + whileHover scale
+- Category card top line: left-to-right reveal on hover
+- Manufacturing steps: gold line draws across on scroll
+- Product cards: whileHover scale 1.01 + top purple line reveal
+- MOQ bar: smooth width transition on quantity change
+- Studio center panel: fade in on generation complete
+- ScanLine: during generation only
+- WhatsApp button: pulse glow every 2s
+- All page transitions: framer-motion AnimatePresence fade
+
+---
+
+## MOBILE RESPONSIVE (test at 375px, 768px, 1280px, 1440px)
+
+- Navbar: hamburger menu on mobile, full-screen dark overlay
+- Hero: 52px headline, stacked CTAs, 2x2 stats grid
+- Category grid: 2x4 on mobile
+- Studio: stacked (product selector top, canvas middle, controls bottom)
+  AI prompt bar full width, thumb-friendly (min 44px tap targets)
+- Catalog: single column, sidebar becomes top filter bar
+- Quote: single column table, horizontal scroll if needed
+- Footer: single column stacked
+- All font sizes readable at mobile (min 12px body)
+
+---
+
+## PERFORMANCE
+
+- All framer-motion on will-change: transform only
+- Images: next/image with lazy loading
+- whileInView not animate (no animation on off-screen elements)
+- Prefers-reduced-motion: hook that disables all animations
+- Font preload: Bebas Neue, Inter
+- No animation on first paint (only after scroll/interaction)
+
+---
+
+## FINAL CHECKLIST
+- [ ] All 80+ products seeded and showing in catalog
+- [ ] Gemini API generates real garment images in studio
+- [ ] Generated image displays full-size in center canvas
+- [ ] Loading state shows cycling text + ScanLine during generation
+- [ ] Regenerate button works with variations
+- [ ] View switching (Front/Back/Sleeve) re-generates correctly
+- [ ] Design history shows past generations
+- [ ] Refine input works after first generation
+- [ ] Style modifier pills modify the Gemini prompt
+- [ ] Garment color + type feed into prompt
+- [ ] Quote engine calculates discounts correctly
+- [ ] MOQ progress bar animates smoothly
+- [ ] WhatsApp pre-filled message sends correctly
+- [ ] Quote saved to Supabase
+- [ ] Email sent via Resend on quote submission
+- [ ] Currency toggle (PKR/USD) works everywhere
+- [ ] SEO meta tags on all pages
+- [ ] Sitemap and robots.txt generated
+- [ ] WhatsApp floating button pulses and opens correctly
+- [ ] Cookie banner works
+- [ ] Mobile responsive at 375px
+- [ ] No console errors on any page
+- [ ] All internal links work
+- [ ] Navbar sticky and blur works on scroll
+- [ ] CountUp fires on scroll into view
+- [ ] All hover animations smooth 60fps
+- [ ] Zero border-radius anywhere on site
+- [ ] Dark scrollbar applied globally
+
+Build all pages completely, commit after each page, then run the full checklist.
