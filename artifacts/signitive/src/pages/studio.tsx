@@ -193,7 +193,9 @@ const buildPreciseEditPrompt = (userInstruction: string): string => {
     collar:   "ONLY the collar/neckline area. Do NOT touch the body, sleeves, or any other part.",
     body:     "ONLY the main body panel (front/back chest area). Do NOT touch the sleeves, collar, or any other part.",
     cuffs:    "ONLY the cuff area at the end of the sleeves. Do NOT touch the sleeve body, main body, collar, or any other part.",
-    logo:     "ONLY the logo/badge/emblem. Do NOT change any colors or other design elements.",
+    logo:     /remove|erase|delete|clean|strip|wipe/i.test(userInstruction)
+      ? "REMOVE AND ERASE all logos, badges, brand emblems, manufacturer marks, and labels completely. Fill the area underneath with matching fabric texture and color. The fabric surface should look clean, unmarked, as if it was never printed. Do NOT change any colors, patterns, or other garment elements."
+      : "ONLY the logo/badge/emblem design. Do NOT change any colors or other design elements.",
     stripes:  "ONLY the stripe/accent areas. Do NOT touch the main body color, sleeves, collar, or any other part.",
     shoulder: "ONLY the shoulder yoke area. Do NOT touch the main body, sleeves, or any other part.",
     number:   "ONLY the number/text element on the garment. Do NOT change any colors, logos, or other elements.",
@@ -467,24 +469,45 @@ function EditPanel({ editTab, setEditTab, selectedPart, setSelectedPart, selecte
         )}
         {editTab === "logos" && (
           <div className="space-y-4">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input type="checkbox" checked={removeBrand} onChange={e=>setRemoveBrand(e.target.checked)} className="mt-0.5 w-4 h-4 accent-[#a78bfa]" />
-              <div>
-                <p className="text-xs font-bold text-white">Remove all brand logos / badges</p>
-                <p className="text-[10px]" style={{color:"#555"}}>Cleans existing marks and restores fabric</p>
-              </div>
-            </label>
+            {/* Remove logos */}
+            <div style={{ border: "1px solid rgba(239,68,68,0.15)", background: "#0f0f0f", padding: "10px 12px" }}>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" checked={removeBrand} onChange={e=>setRemoveBrand(e.target.checked)} className="mt-0.5 w-4 h-4 accent-[#ef4444]" />
+                <div>
+                  <p className="text-xs font-bold text-white">Remove all brand logos / badges</p>
+                  <p className="text-[10px]" style={{color:"#555"}}>Erases existing marks and restores clean fabric underneath</p>
+                </div>
+              </label>
+            </div>
+            {/* Upload logo */}
             <div>
-              <p className="text-[9px] uppercase tracking-widest mb-2" style={{color:"#C9A84C"}}>Upload Your Logo</p>
-              <label className="flex flex-col items-center justify-center p-5 cursor-pointer"
-                style={{ border:"2px dashed rgba(167,139,250,0.3)" }}>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[9px] uppercase tracking-widest" style={{color:"#C9A84C"}}>Place Your Own Logo</p>
+                <span className="text-[8px] px-1.5 py-0.5" style={{ background:"rgba(167,139,250,0.1)", color:"#a78bfa", border:"1px solid rgba(167,139,250,0.2)" }}>Requires Gemini Key</span>
+              </div>
+              <label className="flex flex-col items-center justify-center p-4 cursor-pointer transition-all"
+                style={{ border:"2px dashed rgba(167,139,250,0.3)" }}
+                onMouseEnter={e=>(e.currentTarget as HTMLElement).style.borderColor="rgba(167,139,250,0.6)"}
+                onMouseLeave={e=>(e.currentTarget as HTMLElement).style.borderColor="rgba(167,139,250,0.3)"}>
                 {logoUploadBase64
-                  ? <div className="text-center"><img src={`data:image/png;base64,${logoUploadBase64}`} alt="" className="h-12 object-contain mx-auto mb-2 bg-white/10" /><p className="text-[10px] font-bold" style={{color:"#25d366"}}>✓ Logo ready</p></div>
-                  : <><Upload className="h-5 w-5 mb-2 text-[#555]" /><p className="text-[10px] text-[#555]">Click to upload PNG/SVG</p></>
+                  ? <div className="text-center">
+                      <img src={`data:image/png;base64,${logoUploadBase64}`} alt="" className="h-14 object-contain mx-auto mb-2 bg-white/10 p-1" />
+                      <p className="text-[10px] font-bold" style={{color:"#25d366"}}>✓ Logo ready — click Apply Edit below</p>
+                    </div>
+                  : <>
+                      <Upload className="h-6 w-6 mb-2" style={{color:"#a78bfa"}} />
+                      <p className="text-[10px] font-semibold text-white mb-0.5">Upload PNG / SVG / JPG</p>
+                      <p className="text-[9px]" style={{color:"#555"}}>Logo will be placed on the chest area</p>
+                    </>
                 }
                 <input type="file" accept="image/*,.svg" className="hidden" onChange={handleLogoUpload} />
               </label>
-              {logoUploadBase64 && <button onClick={()=>setLogoUploadBase64(null)} className="mt-1.5 w-full flex items-center justify-center gap-1 py-1 text-[10px] text-[#666]" style={{border:"1px solid rgba(239,68,68,0.2)"}}><Trash2 className="h-3 w-3" /> Remove</button>}
+              {logoUploadBase64 && <button onClick={()=>setLogoUploadBase64(null)} className="mt-1.5 w-full flex items-center justify-center gap-1 py-1 text-[10px]" style={{border:"1px solid rgba(239,68,68,0.2)", color:"#ef4444"}}><Trash2 className="h-3 w-3" /> Remove logo</button>}
+              {!logoUploadBase64 && (
+                <p className="text-[8px] mt-2 text-center" style={{color:"#333"}}>
+                  Add Gemini API key via AI Configuration (bottom of left panel) to enable logo placement
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -1138,7 +1161,11 @@ export default function Studio() {
     // Pollinations fallback: bake instruction into the regeneration prompt
     const applyNlWithPollinations = async (): Promise<string> => {
       const base = currentPromptRef.current || prompt.trim();
-      const combined = [base, instruction, "apparel graphic design, professional product mockup, dark background, high quality"].filter(Boolean).join(", ");
+      const isLogoRemoval = analysis.targetParts.includes("logo") && /remove|erase|delete|clean|strip/i.test(instruction);
+      const extras = isLogoRemoval
+        ? "no brand logos, no text markings, no badges, no emblems, clean fabric surface, no prints"
+        : instruction;
+      const combined = [base, extras, "apparel graphic design, professional product mockup, dark background, high quality"].filter(Boolean).join(", ");
       const seed = Math.floor(Math.random() * 99999);
       const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(combined)}?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
       await new Promise<void>((resolve) => {
