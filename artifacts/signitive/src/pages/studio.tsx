@@ -669,7 +669,7 @@ export default function Studio() {
           setTimeout(() => apiKeyRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 200);
           setIsGenerating(false); return;
         }
-        throw new Error(resData.error || "Generation failed");
+        toast({ title: "Switching to Pollinations AI", description: "Gemini unavailable — generating with free AI instead.", variant: "default" });
       }
 
       // Pollinations fallback
@@ -694,15 +694,7 @@ export default function Studio() {
 
   const handleGenerate = () => {
     if (!prompt.trim()) return;
-    if (!geminiKey) {
-      setIsShaking(true);
-      setTimeout(() => setIsShaking(false), 600);
-      toast({ title: "⚠ API key required", description: "Expand ⚙ AI Configuration at the bottom of this panel to add your Gemini key" });
-      setApiKeyOpen(true);
-      setTimeout(() => apiKeyRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 200);
-      return;
-    }
-    doGenerate(prompt.trim());
+    doGenerate(prompt.trim(), !geminiKey);
   };
 
   const handleGenWithPollinations = () => {
@@ -712,11 +704,7 @@ export default function Studio() {
 
   const handleQuickChip = (chip: typeof QUICK_CHIPS[0]) => {
     setPrompt(chip.prompt);
-    if (geminiKey) {
-      setTimeout(() => doGenerate(chip.prompt), 50);
-    } else {
-      toast({ title: "Prompt filled!", description: "Add your Gemini API key to generate, or click Generate to use Pollinations." });
-    }
+    setTimeout(() => doGenerate(chip.prompt, !geminiKey), 50);
   };
 
   const handleRegenerate = () => {
@@ -1229,9 +1217,7 @@ export default function Studio() {
                     <span className="relative flex items-center gap-2">
                       {isGenerating
                         ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating...</>
-                        : geminiKey
-                          ? <><Zap className="h-4 w-4" /> Generate Design</>
-                          : <><Lock className="h-4 w-4" /> Generate Design</>
+                        : <><Zap className="h-4 w-4" /> Generate Design</>
                       }
                     </span>
                   </button>

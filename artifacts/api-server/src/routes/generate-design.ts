@@ -40,13 +40,13 @@ The garment looks premium and ready for sale. High resolution, sharp details, re
 No extra text, no watermarks, no background clutter.`;
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: fullPrompt }] }],
-          generationConfig: { responseModalities: ["image", "text"] },
+          generationConfig: { responseModalities: ["IMAGE", "TEXT"] },
         }),
       }
     );
@@ -60,7 +60,7 @@ No extra text, no watermarks, no background clutter.`;
       if (status === 400 || status === 403) {
         return res.status(400).json({ error: "Invalid or unauthorized API key.", code: "INVALID_KEY" });
       }
-      return res.status(500).json({ error: "Gemini API error", details: errData });
+      return res.status(500).json({ error: "Gemini API error", code: "GEMINI_ERROR", details: errData });
     }
 
     const data = await response.json();
