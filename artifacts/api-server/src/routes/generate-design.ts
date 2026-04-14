@@ -11,7 +11,7 @@ const STYLE_DESCRIPTIONS: Record<string, string> = {
   Minimalist: "clean minimal design, single color, simple elegant lines",
 };
 
-router.post("/api/generate-design", async (req, res) => {
+router.post("/generate-design", async (req, res) => {
   try {
     const { prompt, styleModifiers = [], garmentType = "t-shirt", garmentColor = "black", view = "front" } = req.body;
     const apiKey = (req.headers["x-gemini-key"] as string) || process.env.GEMINI_API_KEY;

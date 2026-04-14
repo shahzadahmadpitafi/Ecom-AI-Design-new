@@ -6,6 +6,7 @@ import designsRouter from "./designs";
 import quotesRouter from "./quotes";
 import seedRouter from "./seed";
 import generateDesignRouter from "./generate-design";
+import editDesignRouter from "./edit-design";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(designsRouter);
 router.use(quotesRouter);
 router.use(seedRouter);
 router.use(generateDesignRouter);
+router.use(editDesignRouter);
 
 export default router;

@@ -1,0 +1,266 @@
+Each option shows a small SVG icon of the sleeve type.
+Currently active option highlighted in gold.
+
+#### Collar Style:
+[Round Neck]  [V-Neck]  [Polo Collar]  [Mandarin]  [Hooded]
+
+#### Fit Style:
+[Regular Fit]  [Slim Fit]  [Oversized]  [Cropped]
+
+#### Length:
+[Regular]  [Long / Hip]  [Cropped]
+
+### What happens on Apply:
+
+```typescript
+const structureEditPrompt = `
+Edit this garment image.
+${sleeveChanged ? `Change the sleeve length to ${selectedSleeve}. Make the sleeves look like they were originally manufactured this way.` : ''}
+${collarChanged ? `Change the collar style to a ${selectedCollar}. Adapt the neckline naturally.` : ''}
+${fitChanged ? `Change the fit to ${selectedFit}. The garment should look naturally ${selectedFit}.` : ''}
+Keep the colors, patterns, logos, and all design elements exactly the same.
+Only change the structural elements specified above.
+Photorealistic result. Dark background. Professional product photography.
+`;
+```
+
+---
+
+## STEP 5 — API ROUTE (/app/api/edit-design/route.ts)
+
+```typescript
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { NextRequest, NextResponse } from 'next/server';
+
+export async function POST(req: NextRequest) {
+  const body = await req.json();
+  const { currentImageBase64, currentImageMimeType, editPrompt, logoBase64, logoMimeType } = body;
+  const apiKey = req.headers.get('x-gemini-key') || process.env.GEMINI_API_KEY!;
+  
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+
+  // Build content parts
+  const parts: any[] = [
+    {
+      inlineData: {
+        mimeType: currentImageMimeType || 'image/png',
+        data: currentImageBase64,
+      }
+    }
+  ];
+
+  // If logo is provided, add it as second image
+  if (logoBase64) {
+    parts.push({
+      inlineData: {
+        mimeType: logoMimeType || 'image/png',
+        data: logoBase64,
+      }
+    });
+  }
+
+  // Add the text instruction last
+  parts.push({ text: editPrompt });
+
+  const result = await model.generateContent({
+    contents: [{ role: 'user', parts }],
+    generationConfig: { responseModalities: ['image', 'text'] },
+  });
+
+  const responseParts = result.response.candidates?.[0]?.content?.parts;
+  const imagePart = responseParts?.find(p => p.inlineData);
+  
+  if (imagePart?.inlineData) {
+    return NextResponse.json({
+      success: true,
+      imageUrl: `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`
+    });
+  }
+
+  return NextResponse.json({ error: 'Edit failed' }, { status: 500 });
+}
+```
+
+---
+
+## STEP 6 — CLIENT SIDE EDIT FLOW
+
+```typescript
+const handleApplyEdit = async () => {
+  // Convert current canvas image to base64
+  const currentImg = document.querySelector('.canvas-area img') as HTMLImageElement;
+  const canvas = document.createElement('canvas');
+  canvas.width = currentImg.naturalWidth;
+  canvas.height = currentImg.naturalHeight;
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(currentImg, 0, 0);
+  const currentImageBase64 = canvas.toDataURL('image/png').split(',')[1];
+
+  setCanvasMode('generating'); // show loading state
+  setLoadingMessage('Applying your edit...');
+
+  const response = await fetch('/api/edit-design', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-gemini-key': localStorage.getItem('gemini_api_key') || '',
+    },
+    body: JSON.stringify({
+      currentImageBase64,
+      currentImageMimeType: 'image/png',
+      editPrompt: buildEditPrompt(), // builds prompt from current selections
+      logoBase64: uploadedLogoBase64 || null,
+      logoMimeType: 'image/png',
+    }),
+  });
+
+  const data = await response.json();
+  if (data.imageUrl) {
+    // Add original to history before replacing
+    setDesignHistory(prev => [{ imageUrl: generatedImageUrl, prompt: 'Before edit', timestamp: new Date() }, ...prev].slice(0, 10));
+    setGeneratedImageUrl(data.imageUrl);
+    setCanvasMode('generated');
+    toast.success('Edit applied!');
+  }
+};
+```
+
+---
+
+## STEP 7 — EDIT HISTORY & UNDO
+
+- Every time an edit is applied, push the PREVIOUS image to design history
+- "UNDO" button appears after first edit (GoldOutlineButton)
+- Undo: pops last item from history, sets it as current generatedImageUrl
+- Session history thumbnails should show both original generations and edited versions
+- Label each history item: "Generated" or "Edited"
+
+---
+
+## STEP 8 — LOADING MESSAGES FOR EDITS
+
+Different cycling messages during edit (not generation):
+
+Colors tab: 
+  "Recoloring selected parts..."
+  "Matching fabric texture..."
+  "Applying color changes..."
+
+Logos tab (remove):
+  "Removing brand markings..."
+  "Restoring fabric underneath..."
+
+Logos tab (add):
+  "Placing your logo..."
+  "Matching embroidery style..."
+  "Integrating with fabric..."
+
+Structure tab:
+  "Restructuring garment..."
+  "Adjusting sleeve length..."
+  "Reshaping garment..."
+
+---
+
+## STEP 9 — QUICK EDIT CHIPS (below canvas)
+
+After generation, show quick-action chips below the canvas for the most common edits:
+
+[🎨 Change color] [🏷️ Replace logo] [📏 Full sleeves] [📏 Half sleeves] [❌ Remove brand]
+
+Each chip, when clicked:
+- Pre-fills the relevant tab and field in the edit panel
+- Scrolls to the edit panel
+- Highlights the relevant option
+
+---
+
+## UI STYLING FOR EDIT PANEL
+
+```css
+.edit-panel {
+  background: #111;
+  border: 1px solid rgba(167, 139, 250, 0.2);
+  border-top: 2px solid #a78bfa;
+  padding: 16px;
+  margin-top: 12px;
+}
+
+.edit-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid rgba(167, 139, 250, 0.2);
+  margin-bottom: 16px;
+}
+
+.edit-tab {
+  padding: 8px 16px;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #555;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  border-radius: 0;
+}
+
+.edit-tab.active {
+  color: #a78bfa;
+  border-bottom: 2px solid #a78bfa;
+}
+
+.part-pill {
+  padding: 6px 12px;
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  color: #a0a0a0;
+  cursor: pointer;
+  background: transparent;
+  border-radius: 0;
+  transition: all 0.15s;
+}
+
+.part-pill.selected {
+  border-color: #C9A84C;
+  color: #C9A84C;
+  background: rgba(201, 168, 76, 0.08);
+}
+
+.color-swatch {
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border 0.15s;
+}
+
+.color-swatch.selected {
+  border: 2px solid #C9A84C;
+  outline: 1px solid #C9A84C;
+  outline-offset: 2px;
+}
+```
+
+---
+
+## CHECKLIST
+- [ ] Edit panel appears below generated design thumbnail in right panel
+- [ ] Colors tab: part selector pills work, color swatches selectable
+- [ ] Colors tab: multiple parts queued into single Gemini call
+- [ ] Logos tab: remove brand checkboxes work
+- [ ] Logos tab: upload logo + position + size → sends to Gemini with both images
+- [ ] Structure tab: sleeve length options visual selector works
+- [ ] Structure tab: collar and fit options work
+- [ ] Apply Edit calls /api/edit-design with current canvas image as base64
+- [ ] Edited image replaces canvas with fade transition
+- [ ] Loading state shows edit-specific cycling messages
+- [ ] Undo button appears after first edit
+- [ ] Undo restores previous image from history
+- [ ] Quick edit chips below canvas pre-fill the edit panel
+- [ ] Edit history labeled "Generated" vs "Edited"
+- [ ] Mobile: edit panel stacks below canvas, all controls accessible
+- [ ] No console errors
