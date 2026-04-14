@@ -1,0 +1,131 @@
+Fix the AI Design Studio canvas so that the generated design image is actually placed ON TOP of the garment mockup in the center canvas — not just displayed separately in the right panel.
+
+---
+
+## THE EXACT BUG
+
+When a user clicks "Generate Design" or "Regenerate With Variation":
+1. The AI generates an image correctly ✅
+2. The image shows in the "Generated Design" box on the right panel ✅
+3. BUT the center canvas still shows only the plain grey t-shirt silhouette ❌
+4. The generated design is NOT being applied to the canvas ❌
+
+---
+
+## THE FIX — Canvas Overlay Logic
+
+After the AI returns a generated image URL, do the following:
+
+### Step 1 — Load the generated image onto the Fabric.js canvas
+
+```javascript
+// After receiving imageUrl from Replicate API:
+fabric.Image.fromURL(imageUrl, (img) => {
+  // Remove any previously added design layer
+  const existing = canvas.getObjects().filter(o => o.customType === 'design');
+  existing.forEach(o => canvas.remove(o));
+
+  // Get canvas dimensions
+  const canvasWidth = canvas.getWidth();
+  const canvasHeight = canvas.getHeight();
+
+  // Scale image to fit ~40% of canvas width, centered on chest area
+  const targetWidth = canvasWidth * 0.40;
+  const scale = targetWidth / img.width;
+
+  img.set({
+    left: canvasWidth / 2,
+    top: canvasHeight * 0.38,
+    originX: 'center',
+    originY: 'center',
+    scaleX: scale,
+    scaleY: scale,
+    selectable: true,
+    hasControls: true,
+    hasBorders: true,
+    customType: 'design',
+    globalCompositeOperation: 'multiply', // blend with fabric texture
+  });
+
+  canvas.add(img);
+  canvas.setActiveObject(img);
+  canvas.renderAll();
+}, { crossOrigin: 'anonymous' });
+```
+
+### Step 2 — Make the garment mockup the background layer
+
+The t-shirt silhouette/mockup image must be set as the canvas background image (not a canvas object), so the design always renders on top:
+
+```javascript
+canvas.setBackgroundImage(mockupImageUrl, canvas.renderAll.bind(canvas), {
+  scaleX: canvas.width / bgImg.width,
+  scaleY: canvas.height / bgImg.height,
+  originX: 'left',
+  originY: 'top',
+});
+```
+
+### Step 3 — Sync the right panel preview
+
+The "Generated Design" box in the right panel should show the same image as what's on the canvas. Keep it as a thumbnail reference but add a label: "Applied to canvas ✓" in green when the design has been placed.
+
+### Step 4 — "Accept" flow
+
+The current "Accept" button (or equivalent) should:
+- Lock the design layer position
+- Enable the "Add to Quote" button
+- Show a toast: "Design applied! Ready to quote."
+
+### Step 5 — View switching (Front / Back / Left Sleeve / Right Sleeve)
+
+When user switches views:
+- Save the current design object's position, scale, and angle
+- Swap the background mockup image to the new view's image
+- Reposition the design layer to the appropriate zone for that view:
+  - Front: center chest (top: 38%, left: 50%)
+  - Back: center back (top: 35%, left: 50%)
+  - Left Sleeve: (top: 45%, left: 28%)
+  - Right Sleeve: (top: 45%, left: 72%)
+- Re-render canvas
+
+### Step 6 — Upload tab fix (same bug)
+
+Apply the exact same Fabric.js overlay logic when a user uploads their own logo via the Upload tab. The uploaded image must also be placed on the canvas, not just previewed in the panel.
+
+---
+
+## ALSO FIX — Background Removal for Uploaded Logos
+
+When a user uploads a PNG/JPG logo:
+1. Send it to the remove.bg API (or use Replicate background removal model)
+2. Place the background-removed version on canvas
+3. If remove.bg fails, place original and show a warning toast: "Could not remove background automatically — drag to reposition manually"
+
+---
+
+## ALSO FIX — Canvas Hint Text
+
+Below the canvas area, change the hint text to:
+- When no design is applied: "Generate a design or upload your logo to see it on your garment"
+- When design is applied: "Drag to reposition · Pinch or scroll to resize · Switch views above"
+
+---
+
+## ALSO FIX — Mobile Canvas
+
+On screens below 768px:
+- The canvas must take 100% of the screen width
+- The generated design panel should appear BELOW the canvas, not beside it
+- The "Generate Design" button must be visible without scrolling on mobile
+
+---
+
+## CHECKLIST
+- [ ] Generated AI image appears on the canvas garment immediately after generation
+- [ ] Uploaded logo appears on canvas immediately after upload
+- [ ] Design stays on canvas when switching Front/Back/Sleeve views
+- [ ] Right panel shows "Applied to canvas ✓" after design is placed
+- [ ] Canvas background is always the garment mockup, design always renders on top
+- [ ] No console errors about CORS on image loading (use crossOrigin: 'anonymous')
+- [ ] Works on mobile 375px width
