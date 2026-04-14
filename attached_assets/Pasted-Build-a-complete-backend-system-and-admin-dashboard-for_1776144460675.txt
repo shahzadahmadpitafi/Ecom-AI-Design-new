@@ -1,0 +1,602 @@
+Build a complete backend system and admin dashboard for Signitive Enterprises. This covers order management, customer management, design management, analytics, and all admin operations.
+
+---
+
+## TECH STACK ADDITIONS
+npm install @supabase/auth-helpers-nextjs recharts react-hot-toast date-fns xlsx nodemailer
+
+---
+
+## DATABASE SCHEMA — ADD THESE TABLES
+
+### orders:
+- id uuid primary key default gen_random_uuid()
+- order_number text unique (format: SE-2025-0001, auto-increment)
+- customer_id uuid references customers
+- status text default 'pending'
+  values: 'pending' | 'confirmed' | 'sampling' | 'in_production' | 'quality_check' | 'shipped' | 'delivered' | 'cancelled'
+- items jsonb (array of order items)
+- subtotal_pkr numeric
+- discount_percent numeric default 0
+- discount_pkr numeric default 0
+- total_pkr numeric
+- total_usd numeric
+- advance_paid_pkr numeric default 0
+- balance_due_pkr numeric
+- payment_status text default 'unpaid'
+  values: 'unpaid' | 'partial' | 'paid'
+- payment_method text
+- design_image_url text
+- design_prompt text
+- special_instructions text
+- estimated_delivery date
+- actual_delivery date
+- tracking_number text
+- shipping_method text
+- whatsapp_updates boolean default true
+- created_at timestamptz default now()
+- updated_at timestamptz default now()
+
+### customers:
+- id uuid primary key default gen_random_uuid()
+- name text not null
+- email text
+- whatsapp text
+- country text
+- city text
+- address text
+- company_name text
+- total_orders integer default 0
+- total_spent_pkr numeric default 0
+- customer_type text default 'retail'
+  values: 'retail' | 'wholesale' | 'international' | 'vip'
+- notes text
+- created_at timestamptz default now()
+
+### order_items:
+- id uuid primary key default gen_random_uuid()
+- order_id uuid references orders
+- product_id uuid references products
+- product_name text
+- category text
+- garment_color text
+- garment_size text
+- fabric text
+- gsm text
+- quantity integer
+- unit_price_pkr numeric
+- total_price_pkr numeric
+- brand_label boolean default false
+- design_image_url text
+- design_prompt text
+- has_sample boolean default false
+- sample_price_pkr numeric default 0
+
+### production_stages:
+- id uuid primary key default gen_random_uuid()
+- order_id uuid references orders
+- stage text
+  values: 'order_received' | 'design_approved' | 'sampling' | 'sample_approved' | 'cutting' | 'stitching' | 'printing' | 'embroidery' | 'quality_check' | 'packing' | 'dispatched'
+- status text default 'pending'
+  values: 'pending' | 'in_progress' | 'completed'
+- notes text
+- completed_at timestamptz
+- created_at timestamptz default now()
+
+### payments:
+- id uuid primary key default gen_random_uuid()
+- order_id uuid references orders
+- amount_pkr numeric
+- amount_usd numeric
+- payment_method text
+  values: 'bank_transfer' | 'paypal' | 'wise' | 'western_union' | 'cash' | 'stripe'
+- reference_number text
+- status text default 'pending'
+  values: 'pending' | 'confirmed' | 'failed'
+- notes text
+- received_at timestamptz
+- created_at timestamptz default now()
+
+### notifications:
+- id uuid primary key default gen_random_uuid()
+- type text (new_order | payment_received | status_update | new_quote)
+- title text
+- message text
+- order_id uuid references orders
+- is_read boolean default false
+- created_at timestamptz default now()
+
+### admin_users:
+- id uuid primary key references auth.users
+- name text
+- email text
+- role text default 'admin'
+  values: 'super_admin' | 'admin' | 'production_manager' | 'sales'
+- created_at timestamptz default now()
+
+---
+
+## SUPABASE ROW LEVEL SECURITY
+
+Enable RLS on all tables:
+
+orders: 
+  - Admin users can do everything
+  - Customers can only read their own orders (by email match)
+
+customers:
+  - Admin only read/write
+
+payments:
+  - Admin only
+
+production_stages:
+  - Admin read/write, customers read-only for their orders
+
+notifications:
+  - Admin only
+
+---
+
+## ADMIN DASHBOARD (/app/admin/)
+
+Protected route — only accessible by admin_users table members.
+If not admin: redirect to /admin/login
+
+Admin layout:
+- Dark sidebar (240px, background #080808, border-right rgba(167,139,250,0.15))
+- Main content area (flex-1, background #0a0a0a)
+- Top bar with: page title | notifications bell | admin name | logout
+
+Sidebar navigation:
+⚡ SIGNITIVE ADMIN (logo)
+─────────────────
+📊 Dashboard
+📦 Orders
+👥 Customers  
+🎨 Designs
+💰 Payments
+🏭 Production
+📈 Analytics
+⚙ Settings
+─────────────────
+🔔 Notifications (badge with unread count)
+
+Sidebar item styling:
+- Inactive: color #555, hover color #a78bfa
+- Active: color #C9A84C, left border 2px solid #C9A84C, background rgba(201,168,76,0.05)
+- Font: Inter 12px, letter-spacing 1px, uppercase
+
+---
+
+## PAGE: DASHBOARD (/app/admin/dashboard)
+
+### Top Stats Row (4 cards):
+Card 1 — Today's Orders:
+  Big number (CountUp), label "ORDERS TODAY"
+  Subtext: "+X from yesterday" (green if positive, red if negative)
+  Border-top: 2px solid #a78bfa
+
+Card 2 — Revenue This Month:
+  "PKR X,XX,XXX" formatted
+  Subtext: "USD equivalent"
+  Border-top: 2px solid #C9A84C
+
+Card 3 — Pending Orders:
+  Number of orders with status 'pending' or 'confirmed'
+  Subtext: "Requires attention"
+  Border-top: 2px solid #ef4444 (red — urgent)
+
+Card 4 — In Production:
+  Number of orders in 'sampling' | 'in_production' | 'quality_check'
+  Subtext: "Active this week"
+  Border-top: 2px solid #22d3ee
+
+### Revenue Chart (Recharts):
+- Line chart: last 30 days revenue (PKR)
+- Two lines: PKR (gold) and Orders count (purple)
+- Dark background, gold grid lines at 20% opacity
+- Tooltip: dark card showing date, revenue, orders
+- X-axis: dates, Y-axis: PKR amount
+
+### Recent Orders Table:
+- Last 10 orders
+- Columns: Order # | Customer | Product | Qty | Total PKR | Status | Date | Actions
+- Status badges: color-coded pills
+  pending: amber | confirmed: blue | in_production: purple | shipped: cyan | delivered: green | cancelled: red
+- Actions: [View] [Update Status] [WhatsApp]
+- "View All Orders →" link at bottom
+
+### Low Stock / Attention Required:
+- List of orders that haven't been updated in 48+ hours
+- Each row: order number + customer + days since last update + [Update Now] button
+
+### Quick Actions Row:
+[+ New Order] [+ New Customer] [📤 Export Today's Orders] [💬 WhatsApp Pending]
+
+---
+
+## PAGE: ORDERS (/app/admin/orders)
+
+### Filters Bar:
+- Search: by order number, customer name, phone
+- Status filter: All | Pending | Confirmed | Sampling | In Production | QC | Shipped | Delivered | Cancelled
+- Date range picker
+- Payment status filter: All | Unpaid | Partial | Paid
+- Export button: downloads filtered orders as Excel (.xlsx)
+
+### Orders Table:
+Columns:
+- Checkbox (bulk select)
+- Order # (SE-2025-XXXX)
+- Customer name + WhatsApp icon
+- Products (truncated list)
+- Total PKR + payment status badge
+- Order status badge (color-coded)
+- Created date
+- Estimated delivery
+- Actions: [👁 View] [✏️ Edit] [💬 WhatsApp] [🗑 Delete]
+
+Bulk actions (when rows selected):
+- Update Status
+- Send WhatsApp Update
+- Export Selected
+- Delete Selected
+
+### Order Detail Page (/app/admin/orders/[id]):
+
+Split layout:
+
+LEFT COLUMN (60%):
+
+Order Header:
+- Order number (large, Bebas Neue)
+- Status badge + Edit status dropdown
+- Customer info card (name, WhatsApp, country, email)
+- Created date | Estimated delivery (editable date picker)
+
+Order Items Table:
+- Product | Color | Size | Fabric | GSM | Qty | Unit Price | Total
+- Design thumbnail (click to expand full image)
+- Design prompt text
+- Brand label: Yes/No badge
+- Sample: Yes/No badge
+
+Special Instructions box (editable textarea)
+
+Production Timeline:
+- Visual vertical timeline of all stages
+- Each stage: icon + name + status toggle + notes + completed date
+- Stages: Order Received → Design Approved → Sampling → Sample Approved → 
+          Cutting → Stitching → Printing/Embroidery → QC → Packing → Dispatched
+- Admin can click each stage to mark complete + add notes
+- Completed stages: gold checkmark + completed date
+- Current stage: purple pulsing dot
+- Pending stages: grey
+
+RIGHT COLUMN (40%):
+
+Payment Panel:
+- Total PKR | Total USD
+- Discount applied: X%
+- Advance paid: PKR X (green)
+- Balance due: PKR X (red if unpaid)
+- Payment history list (amount | method | date | reference)
+- [+ Record Payment] button → opens modal:
+  Amount PKR | Payment Method | Reference Number | Notes | Date
+  [Save Payment] → updates balance, creates payment record
+
+Order Actions Panel:
+- [✅ Confirm Order] → changes status to confirmed + sends WhatsApp
+- [📱 Send WhatsApp Update] → opens pre-filled WhatsApp message
+- [📧 Send Email Update] → sends email via Resend
+- [🖨️ Print Order Sheet] → print-optimized view
+- [📤 Export as PDF] → generates order PDF
+- [❌ Cancel Order] → confirmation modal
+
+WhatsApp Templates (pre-built messages):
+- Order Confirmed: "Dear [name], your order SE-XXXX has been confirmed. Production starts [date]. Expected delivery: [date]."
+- Sampling Ready: "Your sample for order SE-XXXX is ready. Please review and approve to proceed with bulk production."
+- In Production: "Great news! Your order SE-XXXX is now in production. [X] units being manufactured."
+- Shipped: "Your order SE-XXXX has been dispatched via [courier]. Tracking: [number]."
+- Payment Due: "Dear [name], balance payment of PKR [amount] is due for order SE-XXXX."
+
+Notes Section:
+- Internal notes (not visible to customer)
+- Timestamped, admin name tagged
+- Text area + Add Note button
+
+---
+
+## PAGE: CUSTOMERS (/app/admin/customers)
+
+### Customer Table:
+- Name | WhatsApp | Country | Total Orders | Total Spent PKR | Type | Last Order | Actions
+- Customer type badges: Retail (grey) | Wholesale (blue) | International (purple) | VIP (gold)
+- Sort by: total spent, total orders, last order date
+- Search by name, phone, email, country
+
+### Customer Detail (/app/admin/customers/[id]):
+- Profile card: name, contact info, company, location, type, notes (editable)
+- Stats: Total Orders | Total Spent | Average Order Value | First Order | Last Order
+- Orders history table (all their orders)
+- Designs gallery (all designs they've generated)
+- [Edit Customer] [Send WhatsApp] [Export History] buttons
+
+### Add/Edit Customer Modal:
+- Name*, WhatsApp*, Email, Country, City, Company Name
+- Customer Type selector
+- Notes textarea
+- [Save Customer]
+
+---
+
+## PAGE: DESIGNS (/app/admin/designs)
+
+Gallery of all AI-generated designs across all users/sessions:
+
+- Masonry grid layout (3 cols desktop, 2 cols tablet, 1 col mobile)
+- Each card:
+  - Design image
+  - Prompt text (truncated, expand on hover)
+  - Garment type + color badges
+  - Created date
+  - Status: Used in Order | Quote Only | Abandoned
+  - [View Full] [Use in Order] [Download] buttons
+
+- Filters: by garment type, style modifier, date range, status
+- Search: by prompt keyword
+
+---
+
+## PAGE: PAYMENTS (/app/admin/payments)
+
+### Summary Cards:
+- Total Collected This Month (PKR + USD)
+- Pending Payments (PKR)
+- Overdue Payments (orders unpaid 7+ days)
+- Average Order Value
+
+### Payments Table:
+- Order # | Customer | Amount PKR | Method | Reference | Status | Date | Actions
+- Status: Pending (amber) | Confirmed (green) | Failed (red)
+- [Confirm] button for pending payments
+
+### Record Payment (accessible from order detail or this page):
+Modal with:
+- Order number lookup (search)
+- Amount PKR (auto-fills balance due)
+- Payment method dropdown
+- Reference/transaction number
+- Receipt image upload (optional)
+- Notes
+- Date received
+[Save Payment] → updates order payment_status, creates payment record, sends confirmation WhatsApp to customer
+
+---
+
+## PAGE: PRODUCTION (/app/admin/production)
+
+### Kanban Board View:
+6 columns:
+[Pending] [Confirmed] [Sampling] [In Production] [QC & Packing] [Ready to Ship]
+
+Each column:
+- Header: column name + count badge
+- Cards: order number + customer + product + quantity + days in stage
+- Cards draggable between columns (drag-and-drop updates order status)
+- Card colors by urgency:
+  - Green: on track
+  - Amber: due within 3 days
+  - Red: overdue
+
+### List View Toggle:
+Table showing all active (non-delivered) orders with:
+- Order # | Customer | Products | Qty | Current Stage | Days in Stage | Estimated Delivery | Progress bar
+
+### Production Timeline View:
+Gantt-chart style showing all active orders as horizontal bars across a date grid:
+- Y-axis: order numbers
+- X-axis: dates (next 30 days)
+- Bar color: by status
+- Today line: vertical gold line
+
+---
+
+## PAGE: ANALYTICS (/app/admin/analytics)
+
+### Revenue Analytics:
+- Revenue chart: Daily / Weekly / Monthly toggle
+- Compare periods: This month vs Last month
+- Revenue by product category (bar chart)
+- Revenue by country (bar chart, top 10)
+- Average order value trend
+
+### Order Analytics:
+- Orders by status (donut chart)
+- Orders by product category
+- Peak ordering days/times (heatmap)
+- Repeat customer rate
+
+### Product Analytics:
+- Most ordered products (ranked list)
+- Most used garment colors
+- Most popular fabric/GSM combinations
+- Average quantity per order by product
+
+### Customer Analytics:
+- New vs returning customers (line chart)
+- Customers by country (bar chart)
+- Customer type distribution (donut)
+- Top 10 customers by revenue
+
+All charts: Recharts library, dark theme, gold/purple color scheme
+
+---
+
+## API ROUTES (all under /app/api/admin/)
+
+### Orders:
+GET /api/admin/orders — list with filters
+POST /api/admin/orders — create order
+GET /api/admin/orders/[id] — single order with all relations
+PUT /api/admin/orders/[id] — update order
+DELETE /api/admin/orders/[id] — soft delete (set cancelled)
+POST /api/admin/orders/[id]/status — update status + trigger notifications
+POST /api/admin/orders/[id]/payment — record payment
+GET /api/admin/orders/export — export as Excel
+
+### Customers:
+GET /api/admin/customers — list
+POST /api/admin/customers — create
+GET /api/admin/customers/[id] — detail
+PUT /api/admin/customers/[id] — update
+
+### Production:
+GET /api/admin/production — all active orders with stages
+PUT /api/admin/production/[orderId]/stage — update stage status
+
+### Analytics:
+GET /api/admin/analytics/revenue?period=30d
+GET /api/admin/analytics/orders?period=30d
+GET /api/admin/analytics/products
+GET /api/admin/analytics/customers
+
+### Notifications:
+GET /api/admin/notifications — unread notifications
+PUT /api/admin/notifications/[id]/read — mark read
+POST /api/admin/notifications/read-all — mark all read
+
+---
+
+## AUTOMATED NOTIFICATIONS SYSTEM
+
+### When order is created (from quote submission):
+1. Create notification in DB: type 'new_order'
+2. Send email to info@signitiveenterprises.com via Resend:
+   Subject: "New Order SE-XXXX — [Customer Name] — PKR [Total]"
+   Body: full order details, customer info, design thumbnail link
+3. WhatsApp notification to admin: +923114661392
+   "🔔 New Order! SE-XXXX from [Name] ([Country]). [X] units of [Product]. Total: PKR [Amount]. View: [link]"
+
+### When order status changes:
+1. Update order in DB
+2. Send WhatsApp to customer (if whatsapp_updates = true):
+   Use appropriate template based on new status
+3. Send email to customer (if email exists)
+4. Create internal notification
+
+### When payment recorded:
+1. Update order payment_status
+2. Send receipt confirmation to customer via WhatsApp:
+   "Payment of PKR [amount] received for order SE-XXXX. Balance: PKR [balance]. Thank you!"
+3. Create notification for admin
+
+### Daily digest (cron job via Supabase Edge Function):
+Every day at 8am PKT:
+- Count: new orders, pending orders, payments due
+- Send summary email to admin
+- Send WhatsApp summary to admin
+
+---
+
+## CUSTOMER-FACING ORDER TRACKING (/app/track)
+
+Public page — no login required:
+- Input: Order Number (SE-XXXX) + WhatsApp number
+- If match found: show order tracking page
+- Tracking page shows:
+  - Order summary (products, quantities, total)
+  - Visual production timeline (which stages completed)
+  - Current status with estimated delivery
+  - Payment status + balance due
+  - "Questions? Chat with us" WhatsApp button
+- If no match: "Order not found — contact us on WhatsApp"
+
+---
+
+## ORDER CREATION FROM STUDIO
+
+When customer clicks "ADD TO QUOTE" in the AI Studio, create a proper order flow:
+
+Step 1 — Review Cart:
+- Show all selected items (product, color, size, fabric, GSM, qty, design)
+- MOQ progress bar
+- Pricing breakdown with discount
+
+Step 2 — Customer Details:
+- Name*, WhatsApp*, Email, Country, City, Company (optional)
+- Special instructions textarea
+- Brand label preference
+
+Step 3 — Confirm & Submit:
+- Full order summary
+- Two options:
+  A) "SEND TO WHATSAPP" — opens WhatsApp with full order details
+  B) "SUBMIT ORDER" — creates order in DB, sends email, shows order number
+- On submit: 
+  - Create customer record (or match existing by WhatsApp)
+  - Create order record with status 'pending'
+  - Create order_items records
+  - Save design image to Supabase Storage
+  - Create notification
+  - Send emails
+  - Redirect to /track with order number pre-filled
+  - Show success: "Order SE-XXXX submitted! We'll contact you on WhatsApp within 1 hour."
+
+---
+
+## ADMIN LOGIN (/app/admin/login)
+
+- Dark page, centered card
+- Email + Password (Supabase Auth)
+- Remember me checkbox
+- On success: redirect to /admin/dashboard
+- On fail: shake animation + error toast
+- "Forgot password" link (Supabase magic link)
+- Only users in admin_users table can access admin
+- Middleware protection on all /admin/* routes
+
+---
+
+## EXCEL EXPORT FUNCTIONALITY
+
+Orders export includes:
+- Order number, customer name, WhatsApp, country
+- Products (concatenated), quantities
+- Total PKR, USD, advance paid, balance due
+- Payment status, order status
+- Created date, estimated delivery
+- Design prompt
+
+Format: .xlsx with:
+- Header row: gold background, black text, bold
+- Alternating row colors: #111 / #1a1a1a (dark theme)
+- Auto-column widths
+- Sheet name: "Signitive Orders [Date]"
+
+---
+
+## CHECKLIST
+- [ ] All database tables created with correct schema
+- [ ] RLS policies enabled on all tables
+- [ ] Admin login works (Supabase Auth)
+- [ ] Middleware protects all /admin/* routes
+- [ ] Dashboard loads with real data from DB
+- [ ] Revenue chart shows last 30 days
+- [ ] Orders table with filters and search
+- [ ] Order detail page with full info
+- [ ] Production timeline stages clickable and saveable
+- [ ] Payment recording works and updates balance
+- [ ] WhatsApp template buttons open pre-filled messages
+- [ ] Customer CRUD works
+- [ ] Kanban board drag-and-drop updates order status
+- [ ] Analytics charts load with real data
+- [ ] Order creation from studio saves to DB
+- [ ] Customer-facing order tracking page works
+- [ ] Automated email on new order via Resend
+- [ ] Notifications bell shows unread count
+- [ ] Excel export downloads correctly
+- [ ] Admin login page protected
+- [ ] Mobile responsive admin (sidebar collapses to hamburger)
+- [ ] No console errors on any admin page
