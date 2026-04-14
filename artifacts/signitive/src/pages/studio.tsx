@@ -1038,6 +1038,24 @@ export default function Studio() {
     doGenerate(combined);
   };
 
+  // ── Strip logo/brand references from prompt for clean regeneration ──
+  const stripLogoKeywords = (p: string): string =>
+    p.replace(/\b(logo|badge|emblem|crest|badge|patch|brand|adidas|nike|puma|reebok|under armour|hummel|joma|kappa|star|stripes?|flag|insignia|coat of arms|symbol|mark|label|print|graphics?)\b/gi, "")
+     .replace(/\s{2,}/g, " ")
+     .trim();
+
+  const buildLogoRemovalPollinationsUrl = (basePrompt: string): string => {
+    const cleanedPrompt = stripLogoKeywords(basePrompt);
+    const combined = [
+      cleanedPrompt,
+      "plain fabric surface, no logos, no text, no prints, no badges, no emblems",
+      "professional product mockup, dark background, high quality",
+    ].filter(Boolean).join(", ");
+    const negativeText = "logo,badge,emblem,crest,star,patch,brand name,label,screen print,text,lettering,insignia,coat of arms";
+    const seed = Math.floor(Math.random() * 99999);
+    return `https://image.pollinations.ai/prompt/${encodeURIComponent(combined)}?width=1024&height=1024&nologo=true&seed=${seed}&model=flux&negative_prompt=${encodeURIComponent(negativeText)}`;
+  };
+
   // ── Apply Edit ──
   const handleApplyEdit = async () => {
     if (!generatedImageUrl) {
@@ -1063,11 +1081,18 @@ export default function Studio() {
 
     // Pollinations regeneration with edit baked into prompt
     const applyWithPollinations = async () => {
-      const suffix = buildPollinationsEditSuffix();
       const basePrompt = currentPromptRef.current || prompt.trim();
-      const combined = [basePrompt, suffix, "apparel graphic design, professional product mockup, dark background, high quality"].filter(Boolean).join(", ");
-      const seed = Math.floor(Math.random() * 99999);
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(combined)}?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
+
+      // Logo removal gets a special URL that strips brand words + uses negative_prompt
+      let url: string;
+      if (editTab === "logos" && removeBrand) {
+        url = buildLogoRemovalPollinationsUrl(basePrompt);
+      } else {
+        const suffix = buildPollinationsEditSuffix();
+        const combined = [basePrompt, suffix, "apparel graphic design, professional product mockup, dark background, high quality"].filter(Boolean).join(", ");
+        const seed = Math.floor(Math.random() * 99999);
+        url = `https://image.pollinations.ai/prompt/${encodeURIComponent(combined)}?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
+      }
       await new Promise<void>((resolve) => {
         const img = new Image();
         img.onload = () => resolve();
@@ -1162,12 +1187,14 @@ export default function Studio() {
     const applyNlWithPollinations = async (): Promise<string> => {
       const base = currentPromptRef.current || prompt.trim();
       const isLogoRemoval = analysis.targetParts.includes("logo") && /remove|erase|delete|clean|strip/i.test(instruction);
-      const extras = isLogoRemoval
-        ? "no brand logos, no text markings, no badges, no emblems, clean fabric surface, no prints"
-        : instruction;
-      const combined = [base, extras, "apparel graphic design, professional product mockup, dark background, high quality"].filter(Boolean).join(", ");
-      const seed = Math.floor(Math.random() * 99999);
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(combined)}?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
+
+      const url = isLogoRemoval
+        ? buildLogoRemovalPollinationsUrl(base)
+        : (() => {
+            const combined = [base, instruction, "apparel graphic design, professional product mockup, dark background, high quality"].filter(Boolean).join(", ");
+            const seed = Math.floor(Math.random() * 99999);
+            return `https://image.pollinations.ai/prompt/${encodeURIComponent(combined)}?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
+          })();
       await new Promise<void>((resolve) => {
         const img = new Image();
         img.onload = () => resolve();
