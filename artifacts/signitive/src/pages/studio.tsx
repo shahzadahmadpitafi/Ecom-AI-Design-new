@@ -909,38 +909,28 @@ export default function Studio() {
     }
   };
 
-  // ── Pollinations (client-side, with canvas→base64 conversion for editing) ──
+  // ── Pollinations (client-side — no crossOrigin header, CORS would block load) ──
   const generateWithPollinations = async (promptWithProduct: string, finalPrompt: string) => {
     const styleParts = STYLE_TAGS.filter(t => selectedStyles.includes(t.label)).map(t => t.prompt).join(", ");
     const full = [promptWithProduct, styleParts, "apparel graphic design, professional product mockup, dark background, high quality"].filter(Boolean).join(", ");
     const seed = Math.floor(Math.random() * 99999);
     const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(full)}?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
 
-    const img = new Image();
-    img.crossOrigin = "anonymous";
+    // Load WITHOUT crossOrigin="anonymous" — Pollinations blocks CORS requests and returns an error
     await new Promise<void>((resolve, reject) => {
+      const img = new Image();
       img.onload = () => resolve();
-      img.onerror = () => reject(new Error("Failed to load image"));
+      img.onerror = () => reject(new Error("Failed to load image from Pollinations. Please try again."));
       img.src = url;
-      setTimeout(() => reject(new Error("Image load timed out")), 45000);
+      setTimeout(() => reject(new Error("Image load timed out — please try again")), 60000);
     });
 
-    let imageDataUrl: string;
-    try {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth || 1024;
-      canvas.height = img.naturalHeight || 1024;
-      canvas.getContext("2d")!.drawImage(img, 0, 0);
-      imageDataUrl = canvas.toDataURL("image/jpeg", 0.92);
-    } catch {
-      imageDataUrl = url;
-    }
-
-    setGeneratedImageUrl(imageDataUrl);
-    addToHistory(finalPrompt, imageDataUrl, "Generated");
+    // Use the URL directly for display (canvas conversion requires CORS which Pollinations doesn't allow)
+    setGeneratedImageUrl(url);
+    addToHistory(finalPrompt, url, "Generated");
     setUndoStack([]);
-    setViewCache({ Front: imageDataUrl });
-    toast({ title: "Design ready!", description: "Generated with Pollinations AI. Add a Gemini key for AI editing." });
+    setViewCache({ Front: url });
+    toast({ title: "Design ready!", description: "Generated with Pollinations AI. Add a Gemini key for higher quality." });
   };
 
   // ── Generate ──
