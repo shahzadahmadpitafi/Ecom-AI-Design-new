@@ -996,8 +996,11 @@ export default function Studio() {
           setTimeout(() => apiKeyRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 200);
           return;
         }
-
-        toast({ title: "Switching to Pollinations AI", description: "Gemini unavailable — using free AI instead.", variant: "default" });
+        if (resData.code === "MODEL_NOT_FOUND") {
+          toast({ title: "Gemini model unavailable", description: "Your key doesn't have image generation access — switching to free AI.", variant: "default" });
+        } else {
+          toast({ title: "Switching to Pollinations AI", description: "Gemini unavailable — using free AI instead.", variant: "default" });
+        }
       }
 
       await generateWithPollinations(promptWithProduct, finalPrompt);
