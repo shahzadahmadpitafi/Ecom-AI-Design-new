@@ -796,6 +796,27 @@ export default function Studio() {
     window.dispatchEvent(new Event("storage"));
   };
 
+  // ── Auto-validate Gemini key on startup if flag not set ──
+  useEffect(() => {
+    const key = localStorage.getItem("gemini_api_key");
+    const flagSet = localStorage.getItem("gemini_image_gen");
+    if (key && !flagSet) {
+      fetch("/api/check-gemini", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-gemini-key": key },
+      })
+        .then(r => r.json())
+        .then(d => {
+          if (!d.valid) {
+            localStorage.setItem("gemini_image_gen", "false");
+          } else {
+            localStorage.setItem("gemini_image_gen", d.imageGenAvailable ? "true" : "false");
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
+
   // ── Rotate NL input placeholder every 3s ──
   useEffect(() => {
     const id = setInterval(() => setPlaceholderIdx(i => (i + 1) % NL_PLACEHOLDERS.length), 3000);
@@ -881,8 +902,9 @@ export default function Studio() {
     const gType  = garmentTypeRef.current;
     const gColor = garmentColorRef.current;
 
+    const geminiImageGenOk = localStorage.getItem("gemini_image_gen") !== "false";
     try {
-      if (geminiKey) {
+      if (geminiKey && geminiImageGenOk) {
         const res = await fetch("/api/generate-design", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-gemini-key": geminiKey },
@@ -955,9 +977,11 @@ export default function Studio() {
     const productSuffix = selectedProductData ? ` on a ${garmentColor.label} ${selectedProductData.name}` : "";
     const promptWithProduct = finalPrompt + productSuffix;
 
+    const geminiImageGen = localStorage.getItem("gemini_image_gen") !== "false";
+
     const cacheAndPrefetch = (imageUrl: string) => {
       setViewCache({ Front: imageUrl });
-      if (geminiKey) {
+      if (geminiKey && geminiImageGen) {
         setTimeout(async () => {
           try {
             const res = await fetch("/api/generate-design", {
@@ -973,7 +997,7 @@ export default function Studio() {
     };
 
     try {
-      if (geminiKey) {
+      if (geminiKey && geminiImageGen) {
         const res = await fetch("/api/generate-design", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-gemini-key": geminiKey },
@@ -1268,12 +1292,35 @@ export default function Studio() {
     }, 100);
   };
 
-  const saveGeminiKey = () => {
+  const saveGeminiKey = async () => {
     if (!keyInput.trim()) return;
-    localStorage.setItem("gemini_api_key", keyInput.trim());
-    setGeminiKey(keyInput.trim()); setKeyInput("");
+    const key = keyInput.trim();
+    localStorage.setItem("gemini_api_key", key);
+    setGeminiKey(key); setKeyInput("");
     notifyKeyChange();
-    toast({ title: "✓ Gemini AI connected!", description: "Full generation and editing now available." });
+    toast({ title: "Checking your Gemini key…", description: "Verifying access level." });
+    try {
+      const r = await fetch("/api/check-gemini", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-gemini-key": key },
+      });
+      const d = await r.json();
+      if (!d.valid) {
+        toast({ title: "Invalid API key", description: `${d.error || "Key not accepted by Google."} Please get a valid key from aistudio.google.com`, variant: "destructive" });
+        localStorage.removeItem("gemini_api_key");
+        setGeminiKey("");
+        return;
+      }
+      if (d.imageGenAvailable) {
+        localStorage.setItem("gemini_image_gen", "true");
+        toast({ title: "✓ Gemini AI connected!", description: `Image generation active (${d.workingModel?.replace("gemini-2.0-flash-", "")}).` });
+      } else {
+        localStorage.setItem("gemini_image_gen", "false");
+        toast({ title: "✓ Key valid — image generation not enabled", description: "Your Gemini key works but Google hasn't unlocked image generation for it. Designs will use Pollinations AI (free). To enable Gemini image gen, visit aistudio.google.com and request access to Gemini 2.0 Flash image generation.", variant: "default" });
+      }
+    } catch {
+      toast({ title: "✓ Key saved", description: "Could not verify — will try when generating." });
+    }
   };
 
   const clearGeminiKey = () => {

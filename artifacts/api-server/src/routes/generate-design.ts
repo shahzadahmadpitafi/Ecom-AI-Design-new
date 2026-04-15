@@ -44,11 +44,32 @@ async function tryGeminiGenerate(apiKey: string, body: object): Promise<{ ok: bo
       }
     }
     if (response.status === 404) {
-      console.log(`[generate-design] model ${model} not found, trying next...`);
+      console.log(`[generate-design] model ${model} not found. Reason: ${JSON.stringify(data?.error?.message || data).slice(0, 200)}`);
       continue;
     }
 
     console.error(`[generate-design] model=${model} error:`, JSON.stringify(data).slice(0, 400));
+  }
+  // All image models failed with 404 — check if the key is valid at all
+  try {
+    const validateRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "hi" }] }] }),
+      }
+    );
+    const validateData = await validateRes.json().catch(() => ({}));
+    console.log(`[generate-design] key validation check: status=${validateRes.status} ok=${validateRes.ok}`);
+    if (!validateRes.ok) {
+      console.error(`[generate-design] key validation failed:`, JSON.stringify(validateData).slice(0, 300));
+      const code = validateRes.status === 400 || validateRes.status === 403 ? "INVALID_KEY" : "GEMINI_ERROR";
+      return { ok: false, data: { error: { message: "API key validation failed", details: validateData } }, status: 400, model: "none" };
+    }
+    console.log(`[generate-design] Key is valid but NO image generation models are accessible. This key may not have image generation enabled.`);
+  } catch (e) {
+    console.error("[generate-design] key validation error", e);
   }
   return { ok: false, data: { error: { message: "No image generation model is available for your API key." } }, status: 404, model: "none" };
 }
