@@ -8,6 +8,7 @@ import seedRouter from "./seed";
 import generateDesignRouter from "./generate-design";
 import editDesignRouter from "./edit-design";
 import checkGeminiRouter from "./check-gemini";
+import imageProxyRouter from "./image-proxy";
 import adminRouter from "./admin";
 import { db, ordersTable, customersTable, productionStagesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
@@ -23,6 +24,7 @@ router.use(seedRouter);
 router.use(generateDesignRouter);
 router.use(editDesignRouter);
 router.use(checkGeminiRouter);
+router.use(imageProxyRouter);
 router.use("/admin", adminRouter);
 
 // Public order tracking
