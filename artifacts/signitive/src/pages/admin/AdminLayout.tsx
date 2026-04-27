@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { path: "/admin/production",  label: "Production", Icon: Factory          },
   { path: "/admin/payments",    label: "Payments",   Icon: CreditCard       },
   { path: "/admin/analytics",   label: "Analytics",  Icon: BarChart3        },
+  { path: "/admin/settings",    label: "Settings",   Icon: Settings         },
 ];
 
 interface AdminLayoutProps {

@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
 import AdminLayout from "./AdminLayout";
-import { adminGet, adminPost, adminPut, formatPKR, formatDate } from "@/lib/admin-api";
-import { Search, Plus, MessageCircle, ChevronLeft, Edit2, X } from "lucide-react";
+import { adminGet, adminPost, adminPut, formatPKR, formatDate, StatusBadge } from "@/lib/admin-api";
+import { Search, Plus, MessageCircle, Edit2, X, Package, ChevronRight } from "lucide-react";
 
 const TYPE_COLORS: Record<string, { color: string; border: string }> = {
   retail:        { color: "#a0a0a0", border: "rgba(160,160,160,0.3)" },
@@ -92,13 +91,92 @@ function CustomerModal({ customer, onClose, onSaved }: { customer: any; onClose:
   );
 }
 
-export default function AdminCustomers() {
-  const [, setLocation] = useLocation();
-  const [customers, setCustomers] = useState<any[]>([]);
+function CustomerOrdersPanel({ customer, onClose }: { customer: any; onClose: () => void }) {
+  const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch]   = useState("");
+
+  useEffect(() => {
+    adminGet(`/customers/${customer.id}`).then(d => setOrders(d.orders || [])).catch(console.error).finally(() => setLoading(false));
+  }, [customer.id]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 p-4">
+      <div className="w-full max-w-2xl max-h-[80vh] flex flex-col" style={{ background: "#111", border: "1px solid rgba(201,168,76,0.3)" }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 flex-shrink-0" style={{ borderBottom: "1px solid rgba(167,139,250,0.1)" }}>
+          <div>
+            <h3 className="font-display text-base tracking-widest uppercase" style={{ color: "#C9A84C" }}>
+              {customer.name}
+            </h3>
+            <p className="text-[10px] mt-0.5" style={{ color: "#555" }}>Order History</p>
+          </div>
+          <button onClick={onClose} className="text-[#555] hover:text-white"><X className="h-4 w-4" /></button>
+        </div>
+
+        {/* Stats row */}
+        <div className="grid grid-cols-3 gap-px flex-shrink-0" style={{ borderBottom: "1px solid rgba(167,139,250,0.1)", background: "rgba(167,139,250,0.1)" }}>
+          {[
+            { label: "Total Orders", value: orders.length },
+            { label: "Total Spent",  value: formatPKR(customer.totalSpentPkr) },
+            { label: "Type",         value: customer.customerType?.toUpperCase() || "RETAIL" },
+          ].map(s => (
+            <div key={s.label} className="px-4 py-3" style={{ background: "#111" }}>
+              <p className="text-[9px] uppercase tracking-widest text-[#555]">{s.label}</p>
+              <p className="text-sm font-bold mt-0.5" style={{ color: "#C9A84C" }}>{s.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Orders list */}
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="w-5 h-5 border-2 border-[#C9A84C] border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : orders.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-32 gap-2">
+              <Package className="h-6 w-6 text-[#333]" />
+              <p className="text-sm text-[#555]">No orders yet for this customer.</p>
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr style={{ borderBottom: "1px solid rgba(167,139,250,0.08)" }}>
+                  {["Order #", "Total PKR", "Payment", "Status", "Date"].map(h => (
+                    <th key={h} className="px-4 py-2.5 text-left text-[9px] uppercase tracking-widest text-[#444]">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {orders.map(o => {
+                  const sb  = StatusBadge({ status: o.status });
+                  const psb = StatusBadge({ status: o.paymentStatus, type: "payment" });
+                  return (
+                    <tr key={o.id} style={{ borderBottom: "1px solid rgba(167,139,250,0.05)" }}>
+                      <td className="px-4 py-3 text-xs font-bold" style={{ color: "#C9A84C" }}>{o.orderNumber}</td>
+                      <td className="px-4 py-3 text-xs font-bold text-white">{formatPKR(o.totalPkr)}</td>
+                      <td className="px-4 py-3"><span style={psb.style}>{psb.label}</span></td>
+                      <td className="px-4 py-3"><span style={sb.style}>{sb.label}</span></td>
+                      <td className="px-4 py-3 text-[10px] text-[#555]">{formatDate(o.createdAt)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function AdminCustomers() {
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [search, setSearch]       = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
-  const [modal, setModal]     = useState<{ open: boolean; customer: any | null }>({ open: false, customer: null });
+  const [modal, setModal]         = useState<{ open: boolean; customer: any | null }>({ open: false, customer: null });
+  const [ordersPanel, setOrdersPanel] = useState<any | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -122,7 +200,7 @@ export default function AdminCustomers() {
                 className="w-full h-9 pl-9 pr-3 text-sm text-white outline-none"
                 style={{ background: "#111", border: "1px solid rgba(167,139,250,0.2)" }} />
             </div>
-            <div className="flex gap-1.5">
+            <div className="flex gap-1.5 flex-wrap">
               {["all","retail","wholesale","international","vip"].map(t => (
                 <button key={t} onClick={() => setTypeFilter(t)}
                   className="h-9 px-3 text-[10px] font-bold uppercase tracking-wider border transition-all"
@@ -146,7 +224,9 @@ export default function AdminCustomers() {
         {/* Table */}
         <div style={{ background: "#111", border: "1px solid rgba(167,139,250,0.1)" }}>
           {loading ? (
-            <div className="flex items-center justify-center h-48"><div className="w-6 h-6 border-2 border-[#C9A84C] border-t-transparent rounded-full animate-spin" /></div>
+            <div className="flex items-center justify-center h-48">
+              <div className="w-6 h-6 border-2 border-[#C9A84C] border-t-transparent rounded-full animate-spin" />
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -177,7 +257,14 @@ export default function AdminCustomers() {
                           ) : <span className="text-[#555] text-xs">—</span>}
                         </td>
                         <td className="px-4 py-3 text-xs text-[#888]">{c.country || "—"}</td>
-                        <td className="px-4 py-3 text-xs text-white">{c.totalOrders}</td>
+                        <td className="px-4 py-3">
+                          <button onClick={() => setOrdersPanel(c)}
+                            className="flex items-center gap-1 text-xs transition-colors hover:text-white"
+                            style={{ color: c.totalOrders > 0 ? "#a78bfa" : "#555" }}>
+                            {c.totalOrders}
+                            {c.totalOrders > 0 && <ChevronRight className="h-3 w-3" />}
+                          </button>
+                        </td>
                         <td className="px-4 py-3 text-xs font-bold" style={{ color: "#C9A84C" }}>{formatPKR(c.totalSpentPkr)}</td>
                         <td className="px-4 py-3">
                           <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5"
@@ -187,11 +274,18 @@ export default function AdminCustomers() {
                         </td>
                         <td className="px-4 py-3 text-[10px] text-[#555]">{formatDate(c.createdAt)}</td>
                         <td className="px-4 py-3">
-                          <button onClick={() => setModal({ open: true, customer: c })}
-                            className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold uppercase tracking-wider border transition-all"
-                            style={{ border: "1px solid rgba(167,139,250,0.3)", color: "#a78bfa" }}>
-                            <Edit2 className="h-3 w-3" /> Edit
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => setOrdersPanel(c)}
+                              className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold uppercase tracking-wider border transition-all"
+                              style={{ border: "1px solid rgba(34,211,238,0.3)", color: "#22d3ee" }}>
+                              <Package className="h-3 w-3" /> Orders
+                            </button>
+                            <button onClick={() => setModal({ open: true, customer: c })}
+                              className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold uppercase tracking-wider border transition-all"
+                              style={{ border: "1px solid rgba(167,139,250,0.3)", color: "#a78bfa" }}>
+                              <Edit2 className="h-3 w-3" /> Edit
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -208,7 +302,12 @@ export default function AdminCustomers() {
       </div>
 
       {modal.open && (
-        <CustomerModal customer={modal.customer} onClose={() => setModal({ open: false, customer: null })} onSaved={() => { setModal({ open: false, customer: null }); load(); }} />
+        <CustomerModal customer={modal.customer} onClose={() => setModal({ open: false, customer: null })}
+          onSaved={() => { setModal({ open: false, customer: null }); load(); }} />
+      )}
+
+      {ordersPanel && (
+        <CustomerOrdersPanel customer={ordersPanel} onClose={() => setOrdersPanel(null)} />
       )}
     </AdminLayout>
   );

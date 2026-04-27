@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, ordersTable, customersTable, orderItemsTable } from "@workspace/db";
+import { db, ordersTable, customersTable, orderItemsTable, productsTable } from "@workspace/db";
 import { gte, desc, sql, eq, and } from "drizzle-orm";
 import { requireAdmin } from "./auth";
 
@@ -55,6 +55,19 @@ router.get("/analytics/dashboard", requireAdmin, async (req, res) => {
     // Total customers
     const allCustomers = await db.select().from(customersTable);
 
+    // Top 5 products by order item count
+    const allItems = await db.select().from(orderItemsTable);
+    const productCounts: Record<string, { name: string; category: string; qty: number; revenue: number }> = {};
+    allItems.forEach(item => {
+      const key = item.productName || "Unknown";
+      if (!productCounts[key]) productCounts[key] = { name: key, category: item.category || "", qty: 0, revenue: 0 };
+      productCounts[key].qty += item.quantity || 1;
+      productCounts[key].revenue += item.totalPricePkr || 0;
+    });
+    const topProducts = Object.values(productCounts)
+      .sort((a, b) => b.qty - a.qty)
+      .slice(0, 5);
+
     res.json({
       stats: {
         todayOrders: todayOrders.length,
@@ -67,6 +80,7 @@ router.get("/analytics/dashboard", requireAdmin, async (req, res) => {
       },
       recentOrders,
       chartData: Object.values(chartData),
+      topProducts,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

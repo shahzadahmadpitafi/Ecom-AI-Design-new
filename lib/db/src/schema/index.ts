@@ -4,3 +4,4 @@ export * from "./quotes";
 export * from "./customers";
 export * from "./orders";
 export * from "./admin";
+export * from "./settings";

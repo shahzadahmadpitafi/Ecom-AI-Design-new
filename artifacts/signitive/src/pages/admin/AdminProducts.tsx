@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import AdminLayout from "./AdminLayout";
 import { adminGet, adminPost, adminPut, formatPKR } from "@/lib/admin-api";
-import { Search, Plus, Edit2, Trash2, X, ChevronDown, Star, Package } from "lucide-react";
+import { Search, Plus, Edit2, Trash2, X, ChevronDown, Star, Package, Download } from "lucide-react";
 
 const CATEGORIES = [
   "Streetwear", "Leather Jackets", "Fitness Wear", "Sports Uniforms",
@@ -325,6 +325,13 @@ export default function AdminProducts() {
           {categories.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
 
+        {/* Export CSV */}
+        <button onClick={() => window.open("/api/admin/products-export", "_blank")}
+          className="flex items-center gap-2 h-9 px-3 text-xs uppercase tracking-widest font-bold transition-all border"
+          style={{ border: "1px solid rgba(34,211,238,0.3)", color: "#22d3ee" }}>
+          <Download className="h-3.5 w-3.5" /> CSV
+        </button>
+
         {/* Add */}
         <button onClick={() => { setSelected(null); setModal("add"); }}
           className="flex items-center gap-2 h-9 px-4 text-xs uppercase tracking-widest font-bold transition-all"
@@ -387,14 +394,20 @@ export default function AdminProducts() {
               {/* MOQ */}
               <span className="text-xs text-[#666]">{p.minOrderQty} pcs</span>
 
-              {/* Featured */}
-              <div>
+              {/* Featured — click to toggle */}
+              <button
+                title={p.featured ? "Unfeature" : "Set as featured"}
+                onClick={async () => {
+                  await adminPut(`/products/${p.id}`, { ...p, featured: !p.featured });
+                  fetchProducts();
+                }}
+                className="p-1 transition-transform hover:scale-110">
                 {p.featured ? (
                   <Star className="h-3.5 w-3.5" style={{ color: "#C9A84C", fill: "#C9A84C" }} />
                 ) : (
-                  <Star className="h-3.5 w-3.5 text-[#333]" />
+                  <Star className="h-3.5 w-3.5 text-[#333] hover:text-[#C9A84C]" />
                 )}
-              </div>
+              </button>
 
               {/* Actions */}
               <div className="flex items-center justify-end gap-2">

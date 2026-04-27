@@ -118,4 +118,37 @@ router.delete("/products/:id", async (req, res) => {
   }
 });
 
+// GET /admin/products-export — CSV export
+router.get("/products-export", async (_req, res) => {
+  try {
+    const rows = await db.select().from(productsTable);
+    const header = ["ID","Name","Category","Subcategory","Price PKR","MOQ","Customizable","Featured","Colors","Sizes","Fabrics"];
+    const escape = (v: any) => {
+      const s = (v ?? "").toString();
+      return s.includes(",") || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const lines = [
+      header.join(","),
+      ...rows.map(p => [
+        p.id,
+        escape(p.name),
+        escape(p.category),
+        escape(p.subcategory ?? ""),
+        p.basePricePkr ?? 0,
+        p.minOrderQty ?? 25,
+        p.isCustomizable ? "Yes" : "No",
+        p.featured ? "Yes" : "No",
+        escape((p.availableColors ?? []).join("; ")),
+        escape((p.availableSizes ?? []).join("; ")),
+        escape((p.availableFabrics ?? []).join("; ")),
+      ].join(",")),
+    ];
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="signitive-products-${new Date().toISOString().split("T")[0]}.csv"`);
+    res.send(lines.join("\n"));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
