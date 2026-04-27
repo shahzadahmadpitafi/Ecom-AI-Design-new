@@ -5,6 +5,7 @@ import customersRouter from "./customers";
 import analyticsRouter from "./analytics";
 import notificationsRouter from "./notifications";
 import productionRouter from "./production";
+import productsRouter from "./products";
 
 const adminRouter = Router();
 
@@ -14,5 +15,6 @@ adminRouter.use(customersRouter);
 adminRouter.use(analyticsRouter);
 adminRouter.use(notificationsRouter);
 adminRouter.use(productionRouter);
+adminRouter.use(productsRouter);
 
 export default adminRouter;

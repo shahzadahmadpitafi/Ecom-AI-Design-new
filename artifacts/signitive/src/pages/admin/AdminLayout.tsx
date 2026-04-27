@@ -3,16 +3,17 @@ import { useLocation } from "wouter";
 import { adminGet, adminPost } from "@/lib/admin-api";
 import {
   LayoutDashboard, Package, Users, Palette, CreditCard, Factory, BarChart3,
-  Settings, Bell, LogOut, Menu, X, ChevronRight, Zap,
+  Settings, Bell, LogOut, Menu, X, ChevronRight, Zap, ShoppingBag,
 } from "lucide-react";
 
 const NAV_ITEMS = [
-  { path: "/admin",            label: "Dashboard",  Icon: LayoutDashboard },
-  { path: "/admin/orders",     label: "Orders",     Icon: Package          },
-  { path: "/admin/customers",  label: "Customers",  Icon: Users            },
-  { path: "/admin/production", label: "Production", Icon: Factory          },
-  { path: "/admin/payments",   label: "Payments",   Icon: CreditCard       },
-  { path: "/admin/analytics",  label: "Analytics",  Icon: BarChart3        },
+  { path: "/admin",             label: "Dashboard",  Icon: LayoutDashboard },
+  { path: "/admin/orders",      label: "Orders",     Icon: Package          },
+  { path: "/admin/customers",   label: "Customers",  Icon: Users            },
+  { path: "/admin/products",    label: "Products",   Icon: ShoppingBag      },
+  { path: "/admin/production",  label: "Production", Icon: Factory          },
+  { path: "/admin/payments",    label: "Payments",   Icon: CreditCard       },
+  { path: "/admin/analytics",   label: "Analytics",  Icon: BarChart3        },
 ];
 
 interface AdminLayoutProps {

@@ -22,6 +22,7 @@ import AdminCustomers from "@/pages/admin/AdminCustomers";
 import AdminProduction from "@/pages/admin/AdminProduction";
 import AdminPayments from "@/pages/admin/AdminPayments";
 import AdminAnalytics from "@/pages/admin/AdminAnalytics";
+import AdminProducts from "@/pages/admin/AdminProducts";
 
 const queryClient = new QueryClient();
 
@@ -37,6 +38,7 @@ function Router() {
       <Route path="/admin/orders/:id" component={() => <AdminGuard><AdminOrderDetail /></AdminGuard>} />
       <Route path="/admin/orders" component={() => <AdminGuard><AdminOrders /></AdminGuard>} />
       <Route path="/admin/customers" component={() => <AdminGuard><AdminCustomers /></AdminGuard>} />
+      <Route path="/admin/products" component={() => <AdminGuard><AdminProducts /></AdminGuard>} />
       <Route path="/admin/production" component={() => <AdminGuard><AdminProduction /></AdminGuard>} />
       <Route path="/admin/payments" component={() => <AdminGuard><AdminPayments /></AdminGuard>} />
       <Route path="/admin/analytics" component={() => <AdminGuard><AdminAnalytics /></AdminGuard>} />
